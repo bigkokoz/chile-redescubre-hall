@@ -1,0 +1,22 @@
+{
+  "name": "chile-redescubre-hall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hall de entrada WebXR (Quest passthrough + VR) para Chile Re-Descubre - Taller de Interfaces UAI",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@iwer/devui": "^2.8.0",
+    "@iwer/sem": "^2.8.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "iwer": "^2.8.0",
+    "vite": "^8.3.8"
+  }
+}

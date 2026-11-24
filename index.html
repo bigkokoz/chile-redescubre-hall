@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hall · Chile Re-Descubre</title>
+  <meta name="description" content="Hall de entrada WebXR: pasa a realidad mixta (passthrough) o VR y transforma tu habitación." />
+  <style>
+    :root { --bg:#04050a; --fg:#e9ecf3; --mut:#8b93a7; --acc:#35f0c0; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; overflow:hidden; }
+    canvas { display:block; touch-action:none; }
+    #ui { position:fixed; left:20px; top:20px; max-width:min(380px, calc(100vw - 40px)); z-index:5; display:flex; flex-direction:column; gap:10px; }
+    #ui.hidden { display:none; }
+    h1 { margin:0; font-size:22px; letter-spacing:.2px; font-weight:650; }
+    h1 small { display:block; font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--mut); font-weight:500; margin-bottom:4px; }
+    p { margin:0; color:var(--mut); }
+    .row { display:flex; gap:8px; flex-wrap:wrap; }
+    button { font:inherit; color:var(--fg); background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); padding:10px 14px; border-radius:12px; cursor:pointer; backdrop-filter:blur(8px); transition:background .15s, border-color .15s; }
+    button:hover:not(:disabled) { background:rgba(255,255,255,.14); }
+    button:disabled { opacity:.4; cursor:not-allowed; }
+    button.primary { background:var(--acc); color:#04120e; border-color:transparent; font-weight:650; }
+    button.primary:hover:not(:disabled) { background:#6bf6d4; }
+    #status { font-size:13px; min-height:1.4em; }
+    #themes { display:flex; gap:6px; flex-wrap:wrap; }
+    #themes button { padding:6px 10px; font-size:13px; border-radius:999px; }
+    #themes button.on { border-color:var(--acc); }
+    .hint { font-size:12px; }
+    a { color:var(--acc); }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1><small>Chile Re-Descubre · Taller de Interfaces UAI</small>Hall</h1>
+    <p id="intro">Cuatro portales, cuatro ambientes de Chile. Apunta a uno y tu habitación se transforma.</p>
+    <div class="row">
+      <button id="btnAR" class="primary" disabled>Entrar en AR (passthrough)</button>
+      <button id="btnVR" disabled>Entrar en VR</button>
+    </div>
+    <p id="status">Comprobando tu dispositivo…</p>
+    <div id="themes"></div>
+    <p class="hint" id="hint">Vista previa en PC: arrastra para mirar, clic en un portal para cambiar ambiente, teclas 1–4.</p>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
