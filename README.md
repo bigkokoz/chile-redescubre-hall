@@ -3,7 +3,18 @@
 Hall de entrada WebXR para el concurso **Chile Re-Descubre** (Taller de Diseño de Interfaces, UAI, Unidad 3).
 Entras a una **casa futurista con terraza** abierta a una selva infinita (360°). Sobre el escritorio hay una computadora y un rack con **cuatro discos**: agarras uno, lo metes en la ranura y una **línea de luz** recorre la casa y el paisaje transformándolos en el ambiente del disco (Autopoiesis, Desierto, Mar, Bosque). En **realidad mixta (passthrough)** la estación de discos aparece en miniatura sobre tu mesa real y los planos detectados (piso, paredes, mesas) se visten con el ambiente.
 
-> Estado: v0.3 (física de juguetes + pájaros). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
+> Estado: v0.5 (menú de escenas + recorrido automático + botones VR/AR con logo). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
+
+## Versiones guardadas (etiquetas de git)
+| Etiqueta | Qué es |
+|---|---|
+| `v0.1-hall-base` | Hall base WebXR: portales, transformación de habitación, emulador Quest 3 |
+| `v0.2-casa` | Casa de Blender con luz horneada, discos agarrables y paisajes 360 |
+| `v0.3-fisica` | Física de juguetes: lanzar, tazas que se rompen, pelotas, orbes, pájaros |
+| `v0.4-bosque` | Mundo 2: bosque de papel recorrible |
+| `v0.5-menu` | Selector de escenas, recorrido automático de la cámara, botones VR/AR con logo |
+
+Para volver a una versión: `git checkout v0.3-fisica` (y `npm run build`). El menú de escenas del sitio (`src/menu.js`) lista las escenas activas; agregar una escena = una página nueva + una entrada en `ESCENAS`.
 
 ## Cómo se usa
 - **Meta Quest 3 / Quest 2:** abrir la URL en el Quest Browser → *Entrar en VR* (la casa) o *Entrar en AR (passthrough)* (estación sobre tu mesa). Con el control (gatillo o grip) o pellizcando: apuntar un disco, agarrarlo y soltarlo cerca de la ranura de la computadora (un toque rápido también lo inserta).

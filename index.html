@@ -27,19 +27,22 @@
     #themes button.on { border-color:var(--acc); }
     .hint { font-size:12px; }
     a { color:var(--acc); }
+    button.xr { display:inline-flex; align-items:center; gap:9px; letter-spacing:.07em; font-weight:800; }
+    button.xr.vr { background:var(--acc); color:#04120e; border-color:transparent; font-size:16px; padding:10px 18px; }
+    button.xr.vr:hover:not(:disabled) { background:#6bf6d4; }
+    #ui { bottom:auto; }
   </style>
 </head>
 <body>
   <div id="ui">
     <h1><small>Chile Re-Descubre · Taller de Interfaces UAI</small>Hall</h1>
-    <p id="intro">Una casa con terraza a la selva. Agarra un disco, mételo en la computadora y todo se transforma. También puedes lanzar tazas, pelotas y orbes.</p>
+    <p id="intro">Una casa con terraza a la selva. Agarra un disco, mételo en la computadora y todo se transforma. También puedes lanzar tazas, pelotas y orbes. Elige otra escena abajo.</p>
     <div class="row">
-      <button id="btnAR" class="primary" disabled>Entrar en AR (passthrough)</button>
-      <button id="btnVR" disabled>Entrar en VR</button>
+      <button id="btnAR" class="xr ar" disabled></button>
+      <button id="btnVR" class="xr vr" disabled></button>
     </div>
     <p id="status">Comprobando tu dispositivo…</p>
     <div id="themes"></div>
-    <p class="hint"><a href="bosque.html" style="color:#9fe8b0">→ Otro mundo: Bosque de papel (recorrible, con taller, picaflor y lluvia)</a></p>
     <p class="hint" id="hint">Vista previa en PC: arrastra el fondo para mirar. Mantén el clic sobre un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo (clic corto en un disco = insertarlo). Teclas 1–4 = discos, 0 = volver a la casa, R = reponer objetos.</p>
   </div>
   <script type="module" src="/src/main.js"></script>

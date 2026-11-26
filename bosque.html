@@ -14,7 +14,7 @@
   .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
   button { background:#24402c; color:#eef4e6; border:1px solid #3a6a47; border-radius:9px; padding:8px 12px; cursor:pointer; font-size:14px; }
   button:disabled { opacity:.45; cursor:default; }
-  button.main { background:#ff7a45; color:#1b0e07; border:0; font-weight:700; }
+  button.main { background:#35f0c0; color:#04120e; border:0; font-weight:800; display:inline-flex; align-items:center; gap:9px; letter-spacing:.07em; font-size:16px; padding:8px 16px; }
   label { display:block; font-size:12px; color:#9fb4a2; margin-top:8px; }
   input[type=range] { width:100%; }
   a { color:#9fe8b0; }
@@ -25,12 +25,11 @@
 <div id="ui">
   <h1>Bosque de papel</h1>
   <p>Un taller en medio del bosque valdiviano. Camina, agarra herramientas y tazas, mira las mariposas y espera al picaflor.</p>
-  <div class="row"><button class="main" id="btnVR" disabled>Entrar en VR</button><button id="btnRain">Llover</button><button id="btnHora">Hora: mañana</button></div>
+  <div class="row"><button class="main" id="btnVR" disabled></button><button id="btnRain">Llover</button><button id="btnHora">Hora: mañana</button></div>
   <label>Densidad de plantas <input type="range" id="dens" min="0.2" max="1" step="0.05" value="1"></label>
   <label>Niebla <input type="range" id="niebla" min="0.4" max="2" step="0.05" value="1"></label>
   <p id="hint">PC: arrastra para mirar, WASD para caminar, mantén clic en un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo. L = lluvia, H = hora, R = reponer objetos.<br>Quest: joystick izquierdo camina, derecho gira, gatillo/grip en el aire arrastra el mundo, A = lluvia, B = hora.</p>
   <p id="status">Cargando…</p>
-  <p><a href="./">← volver a la casa</a></p>
 </div>
 <script type="module" src="/src/bosque.js"></script>
 </body>

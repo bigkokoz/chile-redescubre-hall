@@ -4,6 +4,7 @@ import { createToys, makeCup } from './juguetes.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
 import { maybeInstallEmulator } from './emu.js';
+import { mountMenu, maybeSplash, vrButtonHTML } from './menu.js';
 
 // ============================================================================
 // BOSQUE DE PAPEL — mundo recorrible (VR). Estilo "papel recortado en capas":
@@ -430,18 +431,22 @@ addEventListener('keydown', (e) => {
   if (e.key === 'l' || e.key === 'L') toggleRain(); if (e.key === 'h' || e.key === 'H') setHora(PARAM.hora + 1); if (e.key === 'r' || e.key === 'R') toys.resetAll();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+let lastInput = performance.now(), idleBlend = 0;
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true }));
+addEventListener('pointermove', (e) => { if (e.buttons) lastInput = performance.now(); });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 // ---- sesión VR ----
-const btnVR = $('btnVR');
+const btnVR = $('btnVR'); btnVR.innerHTML = vrButtonHTML;
+const menu = mountMenu({ current: 'bosque', onVR: () => btnVR.click() });
 let hudUntil = 0;
 btnVR.onclick = async () => {
   try {
     startAudio();
     const session = await navigator.xr.requestSession('immersive-vr', { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor', 'hand-tracking'] });
-    session.addEventListener('end', () => { $('ui').classList.remove('hidden'); camera.position.set(0, 1.62, 0); });
+    session.addEventListener('end', () => { $('ui').classList.remove('hidden'); menu.hide(false); camera.position.set(0, 1.62, 0); });
     await renderer.xr.setSession(session);
-    $('ui').classList.add('hidden'); camera.position.set(0, 0, 0); hudUntil = performance.now() + 40000;
+    $('ui').classList.add('hidden'); menu.hide(true); camera.position.set(0, 0, 0); hudUntil = performance.now() + 40000;
   } catch (e) { console.error(e); say('No se pudo iniciar VR: ' + (e.message || e)); }
 };
 (async () => {
@@ -449,6 +454,7 @@ btnVR.onclick = async () => {
   const vr = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
   btnVR.disabled = !vr; say(vr ? 'Listo: VR disponible.' : 'Sin VR: vista previa en PC.');
 })();
+maybeSplash(() => btnVR.click(), () => !btnVR.disabled);
 const hud = makeHud(); hud.mesh.visible = false; scene.add(hud.mesh);
 
 // ---- bucle ----
@@ -459,7 +465,9 @@ renderer.setAnimationLoop(() => {
   const xrOn = renderer.xr.isPresenting, cam = xrOn ? renderer.xr.getCamera() : camera;
   fpsT += dt; fpsN++; if (fpsT > 0.5) { fps = Math.round(fpsN / fpsT); fpsT = 0; fpsN = 0; }
   if (!xrOn) {
-    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    const idle = performance.now() - lastInput > 4000; idleBlend += ((idle ? 1 : 0) - idleBlend) * Math.min(1, dt * (idle ? 0.6 : 4));
+    camera.rotation.set(pitch + idleBlend * 0.08 * Math.sin(t * 0.13), yaw + idleBlend * 0.9 * Math.sin(t * 0.09), 0, 'YXZ');
+    camera.position.set(idleBlend * 0.35 * Math.sin(t * 0.11), 1.62, idleBlend * 0.25 * Math.sin(t * 0.07));
     const sp = (keys.has('shift') ? 2 : 1) * LOCO.velocidad * dt;
     fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); rgt.set(-fwd.z, 0, fwd.x);
     if (keys.has('w') || keys.has('arrowup')) rig.position.addScaledVector(fwd, sp); if (keys.has('s') || keys.has('arrowdown')) rig.position.addScaledVector(fwd, -sp);

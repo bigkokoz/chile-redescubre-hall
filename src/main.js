@@ -7,6 +7,7 @@ import { RoomScanner } from './room.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
 import { maybeInstallEmulator } from './emu.js';
+import { mountMenu, maybeSplash, vrButtonHTML, arButtonHTML } from './menu.js';
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
@@ -43,6 +44,8 @@ const toys = createToys({ casa, audio });
 const birds = createBirds(scene, audio);
 const mouseHand = new THREE.Object3D(); mouseHand.name = 'Mano::Mouse'; scene.add(mouseHand);
 
+const menu = mountMenu({ current: 'casa', onVR: () => $('btnVR').click(), onAR: () => $('btnAR').click() });
+
 // ---------- Modo: vista previa (PC) / vr / ar ----------
 let mode = 'preview';
 let stationPlaced = false, arT = 0;
@@ -54,6 +57,7 @@ function setMode(m) {
   renderer.setClearColor(0x04050a, m === 'ar' ? 0 : 1);
   if (m !== 'ar') { scanner.clear(); } else { stationPlaced = false; arT = 0; }
   $('ui').classList.toggle('hidden', m !== 'preview');
+  menu.hide(m !== 'preview');
 }
 setMode('preview');
 
@@ -171,6 +175,7 @@ addEventListener('resize', () => {
 
 // ---------- Sesiones XR ----------
 const btnAR = $('btnAR'), btnVR = $('btnVR');
+btnVR.innerHTML = vrButtonHTML; btnAR.innerHTML = arButtonHTML;
 let enabledFeatures = [];
 async function enter(kind) {
   const xr = navigator.xr;
@@ -202,6 +207,29 @@ async function detect() {
   say(ar || vr ? `Listo: ${ar ? 'AR (passthrough)' : ''}${ar && vr ? ' y ' : ''}${vr ? 'VR' : ''} disponible.` : 'Tu navegador tiene WebXR pero ninguna sesión disponible. Vista previa.');
 }
 detect();
+maybeSplash((k) => enter(k), (k) => !(k === 'vr' ? btnVR : btnAR).disabled);
+
+// ---------- Recorrido automático: cuando nadie toca nada, la cámara pasea por la sala ----------
+const P3 = (a) => a.map((p) => new THREE.Vector3(...p));
+const TOUR_POS = new THREE.CatmullRomCurve3(P3([[0, 1.62, 0.2], [0.8, 1.55, -0.15], [2.4, 1.6, -0.3], [2.5, 1.7, -1.9], [0.3, 1.7, -1.9], [-2.3, 1.7, -1.5], [-2.4, 1.6, -0.3], [-1.5, 1.5, 1.0], [-0.3, 1.55, 0.8]]), true, 'centripetal');
+const TOUR_LOOK = new THREE.CatmullRomCurve3(P3([[0, 1.3, -1.4], [0.2, 1.0, -1.35], [0.3, 1.2, -1.5], [0.5, 1.6, -3.5], [0, 1.5, -30], [-1.0, 1.2, -1.0], [-1.0, 1.1, -1.2], [0.5, 0.8, 2.2], [0, 1.2, -1.4]]), true, 'centripetal');
+let lastInput = performance.now(), tourBlend = 0, tourT = 0;
+const poke = () => { lastInput = performance.now(); if (tourBlend > 0.15) { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); yaw = e.y; pitch = e.x; } };
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, poke, { passive: true }));
+addEventListener('pointermove', (e) => { if (e.buttons) poke(); });
+const tM4 = new THREE.Matrix4(), tQa = new THREE.Quaternion(), tQb = new THREE.Quaternion(), tE = new THREE.Euler(), tPm = new THREE.Vector3(0, 1.62, 0), tP = new THREE.Vector3(), tL = new THREE.Vector3(), tUp = new THREE.Vector3(0, 1, 0);
+function previewCamera(dt) {
+  const idle = performance.now() - lastInput > 3500;
+  tourBlend += ((idle ? 1 : 0) - tourBlend) * Math.min(1, dt * (idle ? 0.8 : 4));
+  if (tourBlend < 0.002) { camera.position.copy(tPm); camera.rotation.set(pitch, yaw, 0, 'YXZ'); return; }
+  tourT += dt * Math.min(1, tourBlend * 1.2);
+  const u = (tourT / 95) % 1;
+  TOUR_POS.getPoint(u, tP); TOUR_LOOK.getPoint(u, tL);
+  tQa.setFromEuler(tE.set(pitch, yaw, 0, 'YXZ'));
+  tM4.lookAt(tP, tL, tUp); tQb.setFromRotationMatrix(tM4);
+  const e = tourBlend * tourBlend * (3 - 2 * tourBlend);
+  camera.position.lerpVectors(tPm, tP, e); camera.quaternion.slerpQuaternions(tQa, tQb, e);
+}
 
 // ---------- Bucle ----------
 const clock = new THREE.Clock();
@@ -227,7 +255,7 @@ renderer.setAnimationLoop((_, frame) => {
   shared.uTime.value += dt;
   const t = shared.uTime.value;
 
-  if (mode === 'preview') camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  if (mode === 'preview') previewCamera(dt);
   themeState.update(dt);
   if (lastIdx !== themeState.index) { lastIdx = themeState.index; markTheme(); }
 
