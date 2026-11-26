@@ -1,0 +1,38 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hall · Chile Re-Descubre</title>
+  <meta name="description" content="Hall de entrada WebXR: pasa a realidad mixta (passthrough) o VR y transforma tu habitación." />
+  <style>:root{--bg:#04050a;--fg:#e9ecf3;--mut:#8b93a7;--acc:#35f0c0}*{box-sizing:border-box}html,body{background:var(--bg);height:100%;color:var(--fg);margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}canvas{touch-action:none;display:block}#ui{z-index:5;flex-direction:column;gap:10px;max-width:min(380px,100vw - 40px);display:flex;position:fixed;top:20px;left:20px}#ui.hidden{display:none}h1{letter-spacing:.2px;margin:0;font-size:22px;font-weight:650}h1 small{letter-spacing:.18em;text-transform:uppercase;color:var(--mut);margin-bottom:4px;font-size:11px;font-weight:500;display:block}p{color:var(--mut);margin:0}.row{flex-wrap:wrap;gap:8px;display:flex}button{font:inherit;color:var(--fg);cursor:pointer;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);background:#ffffff12;border:1px solid #ffffff29;border-radius:12px;padding:10px 14px;transition:background .15s,border-color .15s}button:hover:not(:disabled){background:#ffffff24}button:disabled{opacity:.4;cursor:not-allowed}button.primary{background:var(--acc);color:#04120e;border-color:#0000;font-weight:650}button.primary:hover:not(:disabled){background:#6bf6d4}#status{min-height:1.4em;font-size:13px}label{color:var(--mut);margin-top:6px;font-size:12px;display:block}input[type=range]{width:100%}details{color:var(--mut);font-size:13px}summary{cursor:pointer}label.chk{color:var(--fg);align-items:center;gap:8px;margin:4px 0;display:flex}#themes{flex-wrap:wrap;gap:6px;display:flex}#themes button{border-radius:999px;padding:6px 10px;font-size:13px}#themes button.on{border-color:var(--acc)}.hint{font-size:12px}a{color:var(--acc)}button.xr{letter-spacing:.07em;align-items:center;gap:9px;font-weight:800;display:inline-flex}button.xr.vr{background:var(--acc);color:#04120e;border-color:#0000;padding:10px 18px;font-size:16px}button.xr.vr:hover:not(:disabled){background:#6bf6d4}#ui{bottom:auto}</style>
+  <script type="module" crossorigin src="./assets/main-DQVglW3G.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/three.core-CKanWdSq.js">
+  <link rel="modulepreload" crossorigin href="./assets/three.module-qmZj_b0M.js">
+  <link rel="modulepreload" crossorigin href="./assets/preload-helper-DclECHGd.js">
+</head>
+<body>
+  <div id="ui">
+    <p class="hint" id="volver-portafolio"><a href="https://bigkokoz.github.io/" style="color:#9fe8b0;font-weight:600">← Volver al portafolio</a></p>
+    <h1><small>Chile Re-Descubre · Taller de Interfaces UAI</small><span id="titulo">Hall</span></h1>
+    <p id="intro">Una casa con terraza a la selva. Agarra un disco, mételo en la computadora y todo se transforma. También puedes lanzar tazas, pelotas y orbes. Elige otra escena abajo.</p>
+    <div class="row">
+      <button id="btnAR" class="xr ar" disabled></button>
+      <button id="btnVR" class="xr vr" disabled></button>
+      <button id="btnSonido" class="xr" style="font-size:13px;padding:8px 12px"></button>
+    </div>
+    <p id="status">Comprobando tu dispositivo…</p>
+    <div id="extra"></div>
+    <details id="mov"><summary>Movimiento en VR</summary>
+      <label class="chk"><input type="checkbox" id="loco-joy"> Caminar con el joystick izquierdo</label>
+      <label class="chk"><input type="checkbox" id="loco-snap"> Girar por pasos (joystick derecho)</label>
+      <label class="chk"><input type="checkbox" id="loco-grab"> Arrastrar el mundo (gatillo o grip en el aire)</label>
+      <button id="loco-fis" style="margin-top:6px;padding:6px 10px;font-size:13px">Solo movimiento físico</button>
+      <p class="hint">Dentro del visor lo cambias desde el panel de bolsillo: mete la mano en la cadera y aprieta el grip.</p>
+    </details>
+    <p class="hint" id="hint">Vista previa en PC: arrastra el fondo para mirar. Mantén el clic sobre un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo (clic corto en un disco = insertarlo). Teclas 1–4 = discos, 0 = volver a la casa, R = reponer objetos.</p>
+  </div>
+</body>
+</html>
+
+
