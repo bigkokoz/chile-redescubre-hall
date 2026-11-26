@@ -214,7 +214,7 @@ function update(dt, frame) {
   if (lastIdx !== themeState.index) { lastIdx = themeState.index; markTheme(); }
 
   const xrOn = renderer.xr.isPresenting;
-  const cam = xrOn ? renderer.xr.getCamera() : camera;
+  const cam = camera;
 
   // Disco bajo el rayo (resaltado)
   const hover = new Set();

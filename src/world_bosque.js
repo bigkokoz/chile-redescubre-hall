@@ -542,7 +542,7 @@ const hud = makeHud(); hud.mesh.visible = false; scene.add(hud.mesh);
 let tAcc = 0, fpsT = 0, fpsN = 0, fps = 0, hudT = 0;
 function update(dt) {
   tAcc += dt; const t = tAcc;
-  const xrOn = renderer.xr.isPresenting, cam = xrOn ? renderer.xr.getCamera() : camera;
+  const xrOn = renderer.xr.isPresenting, cam = camera;
   fpsT += dt; fpsN++; if (fpsT > 0.5) { fps = Math.round(fpsN / fpsT); fpsT = 0; fpsN = 0; }
   if (!xrOn) {
     const idle = performance.now() - lastInput > 4000; idleBlend += ((idle ? 1 : 0) - idleBlend) * Math.min(1, dt * (idle ? 0.6 : 4));

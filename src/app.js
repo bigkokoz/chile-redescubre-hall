@@ -57,14 +57,16 @@ const app = {
   renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco, aud, saveAud, guide, input,
   setAudPreset: (n) => { Object.assign(aud, AUD_PRESETS[n]); saveAud(); },
   activeStops: () => (active && active.stops) || null,
+  activeFinds: () => (active && active.finds) || null,
   stopIndex: () => (active && active.mv ? active.mv.cur : -1),
   playStop: (i) => { if (active && active.mv) active.mv.play(i); },
   gotoStop: (i) => {     // el colihuacho te guía hasta la parada; al llegar, la explica solo
     if (!active || !active.village) return; const st = active.stops[i]; if (!st) return;
+    if (active.mv && active.mv.needsTravel && active.mv.needsTravel(i)) { active.mv.play(i); return; }     // desde el presente: viaja y explica al llegar
     guide.target = i; companion.lead(new THREE.Vector3(st.pos[0], st.pos[1] + 0.15, st.pos[2])); say(`Sigue al colihuacho: ${st.titulo}`);
   },
-  onStopPlay: () => { guide.target = -1; const p = panels.find((x) => x.visible) || panel; p.setPage('clase'); if (!p.visible) p.showFront(active.scene, renderer.xr.isPresenting ? renderer.xr.getCamera() : active.camera); else p.redraw(); },
-  onCompanionGrab: () => { const p = panels.find((x) => x.visible) || panel; p.showFront(active.scene, renderer.xr.isPresenting ? renderer.xr.getCamera() : active.camera); p.setPage(active.stops ? 'clase' : 'escenas'); },
+  onStopPlay: () => { guide.target = -1; companion.unlead(); const p = panels.find((x) => x.visible) || panel; p.setPage('clase'); if (!p.visible) p.showFront(active.scene, active.camera); else p.redraw(); },
+  onCompanionGrab: () => { const p = panels.find((x) => x.visible) || panel; p.showFront(active.scene, active.camera); p.setPage(active.stops ? 'clase' : 'escenas'); },
   onCompanionRelease: () => { panels.forEach((p) => { if (p.mode === 'docked') p.release(); }); },
   onNarrationEnd: () => { panel.redraw(); },
   // meter al colihuacho en una ranura del pecho: HALL = vuelve a la casa del hall; SALIR = termina la sesión VR (ves tu entorno)
@@ -193,7 +195,7 @@ function pollXRInput() {
   for (const src of session.inputSources) {
     const gp = src.gamepad; if (!gp || !gp.buttons[3]) continue;     // clic del joystick = panel delante de ti / mandarlo a volar
     const on = !!gp.buttons[3].pressed, key = src.handedness, mag = Math.hypot(gp.axes[2] || 0, gp.axes[3] || 0);
-    if (on && !latch[key] && mag < 0.45) { /* con el joystick empujado, apretarlo es correr: no abre el panel */ app.suppressUntil = performance.now() + 150; if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else panel.showFront(active.scene, renderer.xr.getCamera()); }
+    if (on && !latch[key] && mag < 0.45) { /* con el joystick empujado, apretarlo es correr: no abre el panel */ app.suppressUntil = performance.now() + 150; if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else panel.showFront(active.scene, active.camera); }
     latch[key] = on;
   }
 }
@@ -238,7 +240,7 @@ renderer.setAnimationLoop((_, frame) => {
       const ref = renderer.xr.getReferenceSpace(), vp = ref && frame.getViewerPose(ref);
       if (vp) { mHead.fromArray(vp.transform.matrix); if (active.rig) { active.rig.updateMatrixWorld(true); mHead.premultiply(active.rig.matrixWorld); } camPosV.setFromMatrixPosition(mHead); camDirV.set(0, 0, -1).transformDirection(mHead); have = true; }
     }
-    if (!have) { const cam = xr ? renderer.xr.getCamera() : active.camera; cam.getWorldPosition(camPosV); cam.getWorldDirection(camDirV); }
+    if (!have) { const cam = active.camera; cam.getWorldPosition(camPosV); cam.getWorldDirection(camDirV); }
     if (xr) { pollXRInput(); body.update(dt, camPosV, camDirV); body.highlight(companion.held ? body.slotAt(companion.group.getWorldPosition(new THREE.Vector3())) : -1); }
     companion.update(dt, camPosV, camDirV, performance.now() / 1000);
     if (guide.target >= 0 && active.stops) { const s = active.stops[guide.target]; if (Math.hypot(camPosV.x - s.pos[0], camPosV.z - s.pos[2]) < 4.5) { const i = guide.target; guide.target = -1; active.mv.play(i); } }

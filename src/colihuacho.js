@@ -27,7 +27,10 @@ export function createCompanion(app) {
     get held() { return S.mode === 'held'; },
     attach(scene) { S.sceneRef = scene; scene.add(g); },
     setAudio(a) { stopHum(); S.audio = a; },
-    pickRay(rcIn) { const h = rcIn.intersectObject(hit, false)[0]; return h ? h.distance : -1; },
+    pickRay(rcIn) {      // tolerante: basta con apuntar cerca (0,3 m) de donde está, no hace falta darle justo a la esfera
+      const o = rcIn.ray.origin, d = rcIn.ray.direction; g.getWorldPosition(tmp); tmpFw.copy(tmp).sub(o); const t = tmpFw.dot(d); if (t < 0.05 || t > 8) return -1;
+      return tmpFw.addScaledVector(d, -t).length() < 0.3 ? t : -1;
+    },
     grab(ctrl) {
       if (S.mode === 'held') return;
       S.mode = 'held'; S.holder = ctrl; S.hist.length = 0; S.vel.set(0, 0, 0); ctrl.attach(g);
@@ -59,8 +62,9 @@ export function createCompanion(app) {
         if (S.freeT > 0.7) { tmp.copy(perch).sub(g.position); const d = tmp.length(); S.vel.addScaledVector(tmp.normalize(), (3.5 + d * 2.5) * dt); S.vel.clampLength(0, 6); if (d < 0.16 && S.freeT > 0.9) { S.mode = 'perch'; try { S.audio && S.audio.started && S.audio.sfx('volver', g.getWorldPosition(new THREE.Vector3()), 0.5); } catch { /* sin audio */ } } }
         g.position.addScaledVector(S.vel, dt);
       } else if (S.mode === 'lead' && S.lead) {
-        tmp.copy(S.lead); tmp.y += Math.sin(t * 1.3) * 0.06; const d = tmp.distanceTo(g.position), far = camPos.distanceTo(tmp) > 14;
-        if (!far) g.position.addScaledVector(tmp.sub(g.position), Math.min(1, dt * 1.6 * Math.min(1.5, 0.35 + d * 0.25)));
+        tmp.copy(S.lead); tmp.y += Math.sin(t * 1.3) * 0.06; const dc = camPos.distanceTo(tmp);
+        if (dc > 7) { tmp.sub(camPos).normalize().multiplyScalar(3.2).add(camPos); tmp.y = camPos.y - 0.15 + Math.sin(t * 1.3) * 0.06; }      // si la parada está lejos, va delante de ti mostrando el camino
+        const d = tmp.distanceTo(g.position); g.position.addScaledVector(tmp.sub(g.position), Math.min(1, dt * 1.6 * Math.min(2.5, 0.35 + d * 0.25)));
       } else if (S.mode === 'insert' && S.ins) {
         S.ins.t += dt; g.position.lerp(S.ins.p, 1 - Math.exp(-12 * dt)); g.scale.setScalar(Math.max(0.15, 1 - S.ins.t * 1.6));
         if (S.ins.t > 0.55) { const cb = S.ins.cb; S.ins = null; g.scale.setScalar(1); S.mode = 'free'; S.freeT = 0.9; cb && cb(); }

@@ -9,7 +9,7 @@ import { ESCENAS } from './menu.js';
 // ============================================================================
 
 const W = 1600, H = 820;
-const LABEL = { escenas: 'Escenas', movimiento: 'Movimiento', sonido: 'Sonido', mundo: 'Mundo', clase: 'Clase' };
+const LABEL = { escenas: 'Escenas', movimiento: 'Movimiento', sonido: 'Sonido', mundo: 'Mundo', clase: 'Clase', hallazgos: 'Arqueólogo' };
 
 export function createBody(controllers) {
   const group = new THREE.Group(); group.name = 'Cuerpo';
@@ -82,7 +82,7 @@ export function createPanel(app) {
 
   const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
   const wrap = (text, maxW) => { const out = []; let line = ''; text.split(' ').forEach((w) => { const tt = line + w + ' '; if (ctx.measureText(tt).width > maxW && line) { out.push(line.trim()); line = w + ' '; } else line = tt; }); if (line.trim()) out.push(line.trim()); return out; };
-  const pageKeys = () => ['escenas', 'movimiento', 'sonido', 'mundo', ...(app.activeStops && app.activeStops() ? ['clase'] : [])];
+  const pageKeys = () => ['escenas', 'movimiento', 'sonido', 'mundo', ...(app.activeStops && app.activeStops() ? ['clase'] : []), ...(app.activeFinds && app.activeFinds() ? ['hallazgos'] : [])];
   const L = () => app.loco, A = () => app.aud, C = () => app.activeControls && app.activeControls();
 
   function build() {
@@ -124,6 +124,10 @@ export function createPanel(app) {
         if (c.densidad && c.setDensidad && !c.sinDensidad) stepper(rw++, 'Densidad de plantas', () => c.densidad(), (v) => `${Math.round(v * 100)}%`, () => c.setDensidad(Math.max(0.2, +(c.densidad() - 0.2).toFixed(2))), () => c.setDensidad(Math.min(1, +(c.densidad() + 0.2).toFixed(2))));
         stepper(rw++, 'Niebla', () => c.niebla(), (v) => `×${v.toFixed(1)}`, () => c.setNiebla(Math.max(0.4, +(c.niebla() - 0.2).toFixed(1))), () => c.setNiebla(Math.min(2, +(c.niebla() + 0.2).toFixed(1))));
       }
+    } else if (page === 'hallazgos') {
+      const F = app.activeFinds();
+      F.list.forEach((h, i) => btn(Math.floor(i / 2), i % 2, 2, h.titulo, () => F.show(i), F.sel === i));
+      els.push({ x: X, y: 470, w: RW, h: 300, type: 'finddesc' });
     } else if (page === 'clase') {
       const N = app.narr, st = N.state, stops = app.activeStops(), cur = app.stopIndex();
       els.push({ x: X, y: 126, w: RW, h: 330, type: 'lesson' });
@@ -150,12 +154,19 @@ export function createPanel(app) {
     ctx.strokeStyle = '#35f0c0'; ctx.lineWidth = 4; rr(2, 2, W - 4, H - 4, 34); ctx.stroke();
     els.forEach((e, i) => {
       const hv = hover === i;
-      if (e.type === 'tab') { ctx.fillStyle = e.active ? '#35f0c0' : hv ? '#22303c' : '#141c26'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill(); ctx.fillStyle = e.active ? '#04120e' : '#cfd6e4'; ctx.font = '700 32px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.label, e.x + e.w / 2, e.y + 44); ctx.textAlign = 'left'; }
+      if (e.type === 'tab') { ctx.fillStyle = e.active ? '#35f0c0' : hv ? '#22303c' : '#141c26'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill(); ctx.fillStyle = e.active ? '#04120e' : '#cfd6e4'; ctx.font = `700 ${pageKeys().length > 5 ? 28 : 32}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText(e.label, e.x + e.w / 2, e.y + 44); ctx.textAlign = 'left'; }
       else if (e.type === 'toggle') { ctx.fillStyle = hv ? '#22303c' : '#141c26'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill(); ctx.fillStyle = '#eef2f8'; ctx.font = '600 32px system-ui, sans-serif'; ctx.fillText(e.label, e.x + 26, e.y + e.h / 2 + 11); ctx.fillStyle = e.on ? '#35f0c0' : '#3a4452'; rr(e.x + e.w - 250, e.y + 10, 226, e.h - 20, 24); ctx.fill(); ctx.fillStyle = e.on ? '#04120e' : '#9aa3b8'; ctx.font = '800 28px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.on ? 'ACTIVADO' : 'APAGADO', e.x + e.w - 137, e.y + e.h / 2 + 10); ctx.textAlign = 'left'; }
       else if (e.type === 'row') { ctx.fillStyle = '#141c26'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill(); ctx.fillStyle = '#eef2f8'; ctx.font = '600 31px system-ui, sans-serif'; ctx.fillText(e.label, e.x + 26, e.y + e.h / 2 + 11); ctx.fillStyle = '#35f0c0'; ctx.font = '800 33px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.value, W - 272, e.y + e.h / 2 + 11); ctx.textAlign = 'left'; }
       else if (e.type === 'btn') { ctx.fillStyle = e.active ? '#35f0c0' : hv ? '#2c3d4c' : '#1a2430'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill(); ctx.lineWidth = hv ? 5 : 2; ctx.strokeStyle = hv ? '#ffffff' : 'rgba(255,255,255,0.25)'; rr(e.x, e.y, e.w, e.h, 18); ctx.stroke(); ctx.fillStyle = e.active ? '#04120e' : '#eef2f8'; ctx.font = `700 ${e.small ? 27 : 31}px system-ui, sans-serif`; ctx.textAlign = 'center'; if (e.small) { const ls = wrap(e.label, e.w - 40); ls.slice(0, 2).forEach((l, k) => ctx.fillText(l, e.x + e.w / 2, e.y + e.h / 2 + 9 - (ls.length > 1 ? 14 : 0) + k * 32)); } else ctx.fillText(e.label, e.x + e.w / 2, e.y + e.h / 2 + 11); ctx.textAlign = 'left'; }
       else if (e.type === 'rate') { ctx.fillStyle = '#35f0c0'; ctx.font = '700 28px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.label, e.x + e.w / 2, e.y + e.h / 2 + 10); ctx.textAlign = 'left'; }
       else if (e.type === 'note') { ctx.fillStyle = '#9aa3b8'; ctx.font = '30px system-ui, sans-serif'; wrap(e.label, e.w - 20).forEach((l, k) => ctx.fillText(l, e.x + 10, e.y + 40 + k * 38)); }
+      else if (e.type === 'finddesc') {
+        const F = app.activeFinds(), h = F && F.sel >= 0 ? F.list[F.sel] : null;
+        ctx.fillStyle = '#101822'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill();
+        ctx.fillStyle = '#35f0c0'; ctx.font = '800 38px system-ui, sans-serif'; ctx.fillText(h ? h.titulo : 'Menú del arqueólogo', e.x + 24, e.y + 52);
+        ctx.fillStyle = h ? '#ffffff' : '#9aa3b8'; ctx.font = '29px system-ui, sans-serif';
+        wrap(h ? h.texto.join(' ') : 'Elige algo de lo que se encontró en Monte Verde: aparece una réplica delante de ti (puedes agarrarla y lanzarla) y la narradora cuenta qué es y qué se sabe.', e.w - 48).slice(0, 6).forEach((l, k) => ctx.fillText(l, e.x + 24, e.y + 104 + k * 38));
+      }
       else if (e.type === 'lesson') {
         const st = app.narr.state, stops = app.activeStops(), cur = app.stopIndex(), s = cur >= 0 ? stops[cur] : null;
         ctx.fillStyle = '#101822'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill();
@@ -192,7 +203,7 @@ export function createPanel(app) {
     if (mode === 'closed') return -1;
     const h = r.intersectObject(mesh, false)[0]; if (!h || !h.uv) return -1;
     const px = h.uv.x * W, py = (1 - h.uv.y) * H;
-    for (let i = 0; i < els.length; i++) { const e = els[i]; if (!['note', 'row', 'lesson', 'rate'].includes(e.type) && px >= e.x && px <= e.x + e.w && py >= e.y && py <= e.y + e.h) return i; }
+    for (let i = 0; i < els.length; i++) { const e = els[i]; if (!['note', 'row', 'lesson', 'rate', 'finddesc'].includes(e.type) && px >= e.x && px <= e.x + e.w && py >= e.y && py <= e.y + e.h) return i; }
     return -1;
   }
   function pick(ctrl) { tmpM.identity().extractRotation(ctrl.matrixWorld); rc.ray.origin.setFromMatrixPosition(ctrl.matrixWorld); rc.ray.direction.set(0, 0, -1).applyMatrix4(tmpM); rc.far = 8; return pickWith(rc); }

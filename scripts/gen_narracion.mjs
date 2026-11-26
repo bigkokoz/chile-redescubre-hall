@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { splitSentences, hashText } from '../src/narrador.js';
-import { VIAJE_STOPS, FRASES, COMIDA } from '../src/viaje_data.js';
+import { VIAJE_STOPS, FRASES, COMIDA, HALLAZGOS, HUMO } from '../src/viaje_data.js';
 
 const require = createRequire('C:/Users/PC/.claude/hooks/voz/');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
@@ -15,6 +15,8 @@ const out = path.resolve('public/narracion'); fs.mkdirSync(out, { recursive: tru
 const frases = new Set();
 VIAJE_STOPS.forEach((s) => { splitSentences(s.texto).forEach((x) => frases.add(x)); (s.qa || []).forEach(([, a]) => splitSentences(a).forEach((x) => frases.add(x))); });
 Object.values(COMIDA).forEach((x) => splitSentences(x).forEach((y) => frases.add(y)));
+HALLAZGOS.forEach((h) => splitSentences(h.texto).forEach((y) => frases.add(y)));
+HUMO.forEach((c) => splitSentences(c.t).forEach((y) => frases.add(y)));
 Object.values(FRASES).forEach((x) => splitSentences(x).forEach((y) => frases.add(y)));
 console.log(frases.size, 'frases');
 

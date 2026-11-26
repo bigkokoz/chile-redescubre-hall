@@ -4,7 +4,10 @@ import * as P from './papel.js';
 import * as M from './papel_mv.js';
 import { createToys, makeCup, makeOrb } from './juguetes.js';
 import { HallAudio } from './audio.js';
-import { VIAJE_STOPS, COMIDA } from './viaje_data.js';
+import { VIAJE_STOPS, COMIDA, HALLAZGOS, HUMO } from './viaje_data.js';
+import { makeGonfoterio } from './gonfoterio.js';
+import { splitSentences } from './narrador.js';
+import { visionCanvas } from './humo_img.js';
 
 // ============================================================================
 // EL VIAJE A MONTE VERDE — mundo hecho en Blender (luz horneada, como la Casa).
@@ -61,7 +64,7 @@ export async function createViaje(app) {
           float wd = distance(vWP.xz, uWC.xz); bool ins = wd < uWR; bool pastVis = (ins == (uRev < 0.5));
           ${past ? 'if (!pastVis) discard;' : 'if (pastVis) discard;'}`)
         .replace('#include <dithering_fragment>', `#include <dithering_fragment>
-          if (uWR > 0.0 && uWR < 300.0) { float ring = smoothstep(1.7, 0.0, abs(wd - uWR)); gl_FragColor.rgb += ring * vec3(0.2, 1.0, 0.8); }`);
+          if (uWR > 0.0 && uWR < 300.0) { float ring = smoothstep(1.7 + uWR * 0.025, 0.0, abs(wd - uWR)); gl_FragColor.rgb += ring * vec3(0.2, 1.0, 0.8); }`);
     };
   }
   const prep = (gltf, past, parent) => {
@@ -136,9 +139,12 @@ export async function createViaje(app) {
     const seats = layA.asientos, job = [];
     layA.puestos.forEach((p) => { if (p.a) { const s = seats[+p.a.slice(-1)]; job.push(sprite(p.sprite, new THREE.Vector3(s[0], s[2] - 0.12, -s[1]))); } else job.push(sprite(p.sprite, bl(p.pos))); });
     job.push(sprite('bayas3', new THREE.Vector3(3.0, ground(3, 4.6), 4.6)), sprite('muele2', new THREE.Vector3(-1.6, ground(-1.6, 3.0), 3.0)), sprite('canasto', new THREE.Vector3(-2.6, ground(-2.6, 7.2), 7.2)));
-    job.push(sprite('gonfoterio', new THREE.Vector3(-22, ground(-22, -(yc(-22) + halfw(-22) + 5)), -(yc(-22) + halfw(-22) + 5)), { walk: true }));
     await Promise.all(job);
   }
+  // el gonfoterio es un modelo 3D que camina por la orilla norte del río (con patas y trompa animadas)
+  const gonfo = makeGonfoterio(); gonfo.group.visible = false; gonfo.group.scale.setScalar(0.001); gP.add(gonfo.group);
+  const gonfoS = { x: -24, z: 0, head: Math.PI / 2, pop: 0, sp: 0 }; gonfoS.z = -(yc(gonfoS.x) + halfw(gonfoS.x) + 5.5);
+  const gonfoX = (t) => -34 + (Math.sin(t * 0.04 + 1) * 0.5 + 0.5) * 22;      // va y viene entre x=-34 y x=-12
 
   // ---- fuego (solo en el pasado) ----
   const flameTex = P.toTex(M.flameCanvas()), glowTex = P.toTex(P.glowCanvas());
@@ -162,6 +168,8 @@ export async function createViaje(app) {
   const lever = new THREE.Group(); lever.position.copy(LEVER); gH.add(lever);
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.5, 8).translate(0, 0.25, 0), new THREE.MeshBasicMaterial({ color: 0xcfd6dc }));
   const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10).translate(0, 0.52, 0), new THREE.MeshBasicMaterial({ color: 0xd8452a, toneMapped: false })); lever.add(rod, knob); lever.rotation.x = 0.7;
+  const knobHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: P.toTex(P.glowCanvas()), color: 0xff6a3a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0, fog: false })); knobHalo.position.set(0, 0.52, 0); knobHalo.scale.setScalar(0.3); lever.add(knobHalo);
+  wavify(rod.material, false); wavify(knob.material, false);          // la palanca se disuelve con la ola, como todo lo del presente
   const leverHit = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6).translate(0, 0.4, 0), new THREE.MeshBasicMaterial({ visible: false })); lever.add(leverHit);
   const label = (txt, sub, w = 1.5) => { const c = document.createElement('canvas'); c.width = 768; c.height = 192; const x = c.getContext('2d'); x.fillStyle = 'rgba(8,14,12,0.82)'; x.beginPath(); x.roundRect(4, 4, 760, 184, 36); x.fill(); x.strokeStyle = '#35f0c0'; x.lineWidth = 6; x.stroke(); x.textAlign = 'center'; x.fillStyle = '#9fffe0'; x.font = '800 70px system-ui, sans-serif'; x.fillText(txt, 384, 92); x.fillStyle = '#fff'; x.font = '600 44px system-ui, sans-serif'; x.fillText(sub, 384, 156); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: P.toTex(c), transparent: true, depthTest: false, fog: false })); s.scale.set(w, w * 0.25, 1); s.renderOrder = 900; return s; };
   const leverLabel = label('MÁQUINA DEL TIEMPO', 'tira la palanca', 1.25); leverLabel.position.set(CON.x, CON.y + 1.95, CON.z); gH.add(leverLabel);
@@ -171,6 +179,17 @@ export async function createViaje(app) {
   const cWire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(0.24)), new THREE.LineBasicMaterial({ color: 0xbff8ff, fog: false })); crystal.add(cWire);
   const cHit = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 6), new THREE.MeshBasicMaterial({ visible: false })); crystal.add(cHit);
   const cLabel = label('VOLVER AL PRESENTE', 'toca el cristal', 0.9); cLabel.position.y = 0.55; crystal.add(cLabel);
+
+  // ---- la historia del humo: tocas el fuego y el humo muestra imágenes mientras la narradora cuenta cómo pudieron llegar los antepasados ----
+  const humoLabel = label('HISTORIA DEL HUMO', 'toca el fuego', 1.1); humoLabel.position.set(0, 2.15, 0); fireG.add(humoLabel);
+  const visTex = HUMO.map((c) => P.toTex(visionCanvas(c.img)));
+  const vision = new THREE.Sprite(new THREE.SpriteMaterial({ map: visTex[0], transparent: true, depthWrite: false, opacity: 0, fog: false })); vision.scale.set(4.6, 2.875, 1); vision.position.set(0, 3.3, 0); vision.renderOrder = 50; fireG.add(vision);
+  const HS = { amt: 0, shown: -1, fade: 0, map: HUMO.flatMap((c, i) => splitSentences(c.t).map(() => i)), texto: HUMO.flatMap((c) => c.t) };
+  const humoLive = () => { const ns = app.narr.state; return !!(ns.stop && ns.stop.id === 'humo' && ns.sentences.length && !(!ns.playing && ns.idx >= ns.sentences.length - 1)); };
+  function startHumo() {
+    if (T.era !== 'antes' || T.moving) return; if (humoLive() && app.narr.state.playing) { app.narr.pause(); return; }
+    app.narr.play({ id: 'humo', titulo: 'La historia del humo', texto: HS.texto, qa: [] }); fireE = Math.min(2.2, fireE + 0.5);
+  }
 
   // ---- audio ----
   const audio = new HallAudio(camera); audio.prefs = app.aud; scene.add(audio.sfxRoot);
@@ -220,6 +239,29 @@ export async function createViaje(app) {
     nuez: () => { const g = new THREE.Group(); part(g, new THREE.SphereGeometry(0.026, 8, 6), std(0x6a4a2a, 0.8)); return [g, 0.026]; },
     hongo: () => { const g = new THREE.Group(); part(g, new THREE.CylinderGeometry(0.012, 0.016, 0.05, 7), std(0xf1e7c8), 0, 0.025, 0); part(g, new THREE.SphereGeometry(0.035, 10, 6, 0, 6.3, 0, 1.6), std(0xc4562e), 0, 0.05, 0); return [g, 0.04]; },
   };
+  // ---- menú del arqueólogo: réplicas de lo que se encontró (aparecen frente a ti y se pueden agarrar y lanzar) ----
+  const REPL = {
+    madera: () => { const g = new THREE.Group(); part(g, new THREE.BoxGeometry(0.34, 0.035, 0.09), std(0x7a5a38, 1)); part(g, new THREE.CylinderGeometry(0.014, 0.01, 0.3, 6), std(0x6a4a2c, 1), 0.07, 0.04, 0.02, Math.PI / 2, 0, 0.5); return [g, 0.045]; },
+    piel: () => { const g = new THREE.Group(); const m = part(g, new THREE.BoxGeometry(0.22, 0.01, 0.16), std(0x8a6a4a, 1)); m.rotation.y = 0.2; part(g, new THREE.BoxGeometry(0.1, 0.012, 0.08), std(0x6a4c32, 1), 0.04, 0.008, 0.03, 0, 0.6); return [g, 0.03]; },
+    hueso: () => { const g = new THREE.Group(); const bone = std(0xe6dcc4, 0.85); part(g, new THREE.CylinderGeometry(0.022, 0.022, 0.26, 8), bone, 0, 0, 0, 0, 0, Math.PI / 2); [-1, 1].forEach((s) => { part(g, new THREE.SphereGeometry(0.035, 8, 6), bone, s * 0.13, 0.015, 0); part(g, new THREE.SphereGeometry(0.035, 8, 6), bone, s * 0.13, -0.015, 0); }); return [g, 0.04]; },
+    hoja: () => { const g = new THREE.Group(); const m = part(g, new THREE.SphereGeometry(0.07, 10, 6), std(0x4f7a3a, 0.9)); m.scale.set(1, 0.08, 0.55); part(g, new THREE.CylinderGeometry(0.004, 0.004, 0.16, 4), std(0x3a5a2a), 0, 0.006, 0, 0, 0, Math.PI / 2); return [g, 0.02]; },
+    papa: () => FOODS.papa(), alga: () => FOODS.alga(),
+    piedra: () => { const g = new THREE.Group(); part(g, new THREE.IcosahedronGeometry(0.05, 1), std(0x8a8a86, 1)); return [g, 0.05]; },
+    carbon: () => { const g = new THREE.Group(); [[0, 0, 0, 0.035], [0.05, 0, 0.02, 0.025], [-0.03, 0, 0.045, 0.028]].forEach(([x, y, z, r]) => { const m = part(g, new THREE.DodecahedronGeometry(r, 0), std(0x1a1816, 1), x, y, z); m.scale.y = 0.7; }); return [g, 0.035]; },
+  };
+  const spawnedFind = {}, fwdF = new THREE.Vector3(), camWF = new THREE.Vector3();
+  const finds = {
+    list: HALLAZGOS, sel: -1,
+    show(i) {
+      const h = HALLAZGOS[i]; if (!h) return; finds.sel = i;
+      app.narr.play({ id: 'hallazgo-' + h.id, titulo: h.titulo, texto: h.texto, qa: [] });
+      const ts = toysNow(), key = h.kind + T.era, prev = spawnedFind[key]; if (prev) { prev.state = 'dead'; prev.obj.visible = false; prev.respawn = 1e9; }
+      camera.getWorldPosition(camWF); camera.getWorldDirection(fwdF); fwdF.y = 0; fwdF.normalize();
+      const [obj, r] = REPL[h.kind](), p = camWF.clone().addScaledVector(fwdF, 0.7); p.y = camWF.y - 0.4;
+      const b = ts.add(h.kind, obj, p, { r, e: 0.2, roll: 6 }); b.sleep = false; b.idle = 0; spawnedFind[key] = b;
+      try { audio.sfx('pop', p, 0.5); } catch { /* sin audio */ }
+    },
+  };
   layA.canastos.forEach((c, k) => {
     const base = bl(c); ['papa', 'bayas', 'alga', 'carne', 'nuez', 'hongo'].forEach((kind, i) => {
       if ((i + k) % 3 === 0 && i > 3) return; const [obj, r] = FOODS[kind](); const a = i / 6 * 6.283 + k;
@@ -230,23 +272,31 @@ export async function createViaje(app) {
     for (let i = 0; i < 6; i++) { const a = i * 1.05 + 0.4, d = 0.95 + (i % 3) * 0.12; const o = twig(0.22 + (i % 3) * 0.06); toysP.add('palito', o, new THREE.Vector3(FIRE.x + Math.cos(a) * d, FIRE.y + 0.03, FIRE.z + Math.sin(a) * d), { r: 0.025, e: 0.3, roll: 8 }); o.rotation.y = a; } }
 
   // ---- estado del viaje ----
-  const T = { era: 'hoy', moving: false, t: 0, dir: 1, blend: 0, leverT: 0, pastReady: false, wantTravel: false, pending: -1 };
+  // charge = segundos desde que tiras la palanca (la máquina "carga" ~2 s) antes de que salga la ola; DUR = lo que dura la ola
+  const T = { era: 'hoy', moving: false, t: 0, dir: 1, blend: 0, charge: 0, pastReady: false, wantTravel: false, pending: -1 };
+  const CHARGE = 2.2, DUR = 10;
   let pastLoadErr = '';
-  const pastP = Promise.all([loadGlb('antes_terreno.glb'), loadGlb('antes_objetos.glb')]).then(([t, o]) => { prep(t, true, gP); prep(o, true, gP); T.pastReady = true; if (T.wantTravel) travel('antes'); }).catch((e) => { pastLoadErr = String(e.message || e); say('No se pudo cargar el pasado: ' + pastLoadErr); });
+  const pastP = Promise.all([loadGlb('antes_terreno.glb'), loadGlb('antes_objetos.glb')]).then(([t, o]) => { prep(t, true, gP); prep(o, true, gP); T.pastReady = true; if (T.wantTravel) { T.wantTravel = false; pullLever(); } }).catch((e) => { pastLoadErr = String(e.message || e); say('No se pudo cargar el pasado: ' + pastLoadErr); });
+  /** parte la ola de tiempo desde la máquina (al ir) o desde el cristal (al volver) */
   function travel(to) {
     if (T.moving || T.era === to) return;
     if (to === 'antes' && !T.pastReady) { T.wantTravel = true; say('La máquina se está calentando… (cargando el pasado)'); return; }
     T.wantTravel = false; T.moving = true; T.t = 0; T.dir = to === 'antes' ? 1 : -1; T.target = to;
     W.c.value.copy(to === 'antes' ? CON : crystalPos); W.rev.value = to === 'antes' ? 0 : 1; W.r.value = 0.01;
-    try { audio.sfx('zumbido', W.c.value, 0.7); audio.sfx('volver', W.c.value, 0.7); } catch { /* sin audio */ }
-    if (to === 'antes') T.leverT = 0.001;
+    try { audio.sfx('zumbido', W.c.value, 0.8); } catch { /* sin audio */ }
   }
-  const pullLever = () => { if (T.moving || T.era !== 'hoy') return; travel('antes'); if (!T.wantTravel) T.leverT = 0.001; };
+  /** tirar la palanca: la palanca baja (se ve), la máquina vibra y se enciende, y recién ahí sale la ola */
+  function pullLever() {
+    if (T.moving || T.charge > 0 || T.era !== 'hoy') return;
+    if (!T.pastReady) { T.wantTravel = true; say('La máquina se está calentando… (cargando el pasado)'); return; }
+    T.charge = 0.001; try { audio.sfx('zumbido', LEVER, 0.9); audio.sfx('pop', LEVER, 0.7); } catch { /* sin audio */ }
+  }
   const mv = {
     stops: VS, cur: -1,
+    needsTravel: (i) => i > 0 && T.era !== 'antes',
     play(i) {
       const s = VS[i]; if (!s) return;
-      if (i > 0 && T.era !== 'antes') { T.pending = i; if (T.moving) return; travel('antes'); return; }
+      if (i > 0 && T.era !== 'antes') { T.pending = i; if (T.moving || T.charge > 0) return; pullLever(); return; }
       mv.cur = i; markVisited(i); app.narr.play(s); app.onStopPlay && app.onStopPlay(i);
     },
   };
@@ -286,8 +336,11 @@ export async function createViaje(app) {
     if (T.era === 'hoy' && !T.moving && hitsObj(rc, leverHit)) { pullLever(); return true; }
     if (T.era === 'antes' && !T.moving && hitsObj(rc, cHit)) { travel('hoy'); return true; }
     const si = village.pickStop(rc); if (si >= 0) { mv.play(si); return true; }
+    if (fireAim(rc)) { startHumo(); return true; }
     return false;
   }
+  const _f = new THREE.Vector3();
+  const fireAim = (rc) => fireG.visible && T.era === 'antes' && !T.moving && rayDist(rc, _f.set(FIRE.x, FIRE.y + 0.6, FIRE.z)) < 0.7;
   function foodTalk(b) { const txt = T.era === 'antes' && COMIDA[b.kind]; if (!txt || app.narr.state.playing) return; app.narr.play({ id: 'comida', titulo: 'Comida del campamento', texto: [txt], qa: [] }); }
   const held = new Map(); let drag = null;
   const busy = () => !active || performance.now() < app.suppressUntil || app.menuOpen();
@@ -331,10 +384,10 @@ export async function createViaje(app) {
   addEventListener('pointerup', () => { if (!active) return; dragLook = false; if (mouseItem) { mouseItem.ts.release(mouseItem.b); mouseItem = null; } });
   addEventListener('pointermove', (e) => {
     if (!active || renderer.xr.isPresenting) return; ndc(e);
-    if (!mouseItem) { mouseHover = pickToy(raycaster); const over = (T.era === 'hoy' && hitsObj(raycaster, leverHit)) || (T.era === 'antes' && hitsObj(raycaster, cHit)) || village.pickStop(raycaster) >= 0; renderer.domElement.style.cursor = mouseHover || over ? 'pointer' : dragLook ? 'grabbing' : 'grab'; }
+    if (!mouseItem) { mouseHover = pickToy(raycaster); const over = (T.era === 'hoy' && hitsObj(raycaster, leverHit)) || (T.era === 'antes' && hitsObj(raycaster, cHit)) || village.pickStop(raycaster) >= 0 || fireAim(raycaster); renderer.domElement.style.cursor = mouseHover || over ? 'pointer' : dragLook ? 'grabbing' : 'grab'; }
     if (!dragLook || e.pointerId !== lookId) return; yaw -= (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY;
   });
-  addEventListener('keydown', (e) => { if (!active) return; startAudio(); keys.add(e.key.toLowerCase()); if (e.key === 't' || e.key === 'T') { if (T.era === 'hoy') pullLever(); else travel('hoy'); } if (e.key === 'r' || e.key === 'R') toysNow().resetAll(); });
+  addEventListener('keydown', (e) => { if (!active) return; startAudio(); keys.add(e.key.toLowerCase()); if (e.key === 't' || e.key === 'T') { if (T.era === 'hoy') pullLever(); else travel('hoy'); } if (e.key === 'r' || e.key === 'R') toysNow().resetAll(); if ((e.key === 'h' || e.key === 'H') && T.era === 'antes') startHumo(); });
   addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
   // ---- bucle ----
@@ -342,7 +395,7 @@ export async function createViaje(app) {
   const col1 = new THREE.Color(), tNow = { t: 0 }; let chirpT = 6, autoT = 0, aimed = -1;
   const camW = new THREE.Vector3(), tmpA = new THREE.Vector3();
   function update(dt) {
-    tNow.t += dt; const t = tNow.t, xrOn = renderer.xr.isPresenting, cam = xrOn ? renderer.xr.getCamera() : camera;
+    tNow.t += dt; const t = tNow.t, xrOn = renderer.xr.isPresenting, cam = camera;
     // movimiento
     headW.set(rig.position.x, 0, rig.position.z);
     if (!xrOn) {
@@ -356,15 +409,19 @@ export async function createViaje(app) {
     cam.getWorldPosition(camW);
     // viaje
     if (T.moving) {
-      T.t += dt / 6; const u = Math.min(1, T.t), R = eased(u) * 150; W.r.value = R; T.blend = T.dir > 0 ? eased(u) : 1 - eased(u);
+      T.t += dt / DUR; const u = Math.min(1, T.t), R = (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2) * 150; W.r.value = R;   // lenta al principio, rápida en el medio, suave al final
+      { const k = sst(0.1, 0.88, u); T.blend = T.dir > 0 ? k : 1 - k; } motes.material.size = 0.09 + 0.14 * Math.sin(Math.PI * u);
       if (u >= 1) {
         T.moving = false; T.era = T.target; T.blend = T.era === 'antes' ? 1 : 0; W.r.value = T.era === 'antes' ? 1e5 : -1; W.rev.value = 0;
         say(T.era === 'antes' ? 'Hace ~14.800 años. Acércate a las esferas luminosas.' : 'De vuelta en el presente.'); app.panelRedraw && app.panelRedraw();
         if (T.era === 'antes') { const i = T.pending > 0 ? T.pending : (stopObjs[1].visited ? -1 : 1); T.pending = -1; if (i > 0) mv.play(i); }
       }
     }
-    if (T.leverT > 0) { T.leverT += dt; const k = Math.min(1, T.leverT / 0.7); lever.rotation.x = 0.7 - 1.4 * eased(k); if (T.era === 'hoy' && !T.moving && !T.wantTravel && T.leverT > 1.2) T.leverT = 0; }
-    if (T.era === 'hoy' && !T.moving && T.leverT === 0) lever.rotation.x += (0.7 - lever.rotation.x) * Math.min(1, dt * 4);
+    if (T.charge > 0) {            // la palanca baja, la máquina vibra y el pomo se enciende; al terminar sale la ola
+      T.charge += dt; const k = Math.min(1, T.charge / 0.9), sh = Math.min(1, T.charge / CHARGE); lever.rotation.x = 0.7 - 1.4 * eased(k);
+      knobHalo.material.opacity = 0.95 * sh; knobHalo.scale.setScalar(0.3 + sh * 0.7 + Math.sin(t * 28) * 0.05); lever.position.x = LEVER.x + Math.sin(t * 70) * 0.006 * sh;
+      if (T.charge >= CHARGE) { T.charge = 0; travel('antes'); }
+    } else if (T.era === 'hoy' && !T.moving) { lever.rotation.x += (0.7 - lever.rotation.x) * Math.min(1, dt * 3); lever.position.x = LEVER.x; knobHalo.material.opacity *= 0.92; }
     // mezcla de cielo / niebla / lejanías
     const b = T.blend; col1.copy(COL.hoyBg).lerp(COL.pastBg, b); scene.background.copy(col1); scene.fog.color.copy(col1);
     scene.fog.near = COL.hoyFog[0] + (COL.pastFog[0] - COL.hoyFog[0]) * b; scene.fog.far = (COL.hoyFog[1] + (COL.pastFog[1] - COL.hoyFog[1]) * b) / (app.viajeNiebla || 1);
@@ -372,7 +429,7 @@ export async function createViaje(app) {
     farForest.visible = b > 0.02; farForest.scale.y = Math.max(0.001, sst(0.15, 0.95, b)); farGround.material.color.setHex(0x8c9a5a).lerp(col1.setHex(0x3f5f34), b);
     // lo que depende de dónde está la ola
     const campPast = pastAt(FIRE);
-    fireG.visible = campPast; crystal.visible = campPast && !T.moving; leverLabel.visible = !T.moving && !pastAt(CON); lever.visible = !pastAt(CON);
+    fireG.visible = campPast; crystal.visible = campPast && !T.moving; leverLabel.visible = !T.moving && T.charge === 0 && !pastAt(CON); lever.visible = T.era === 'hoy' || T.moving;
     gP.visible = T.era === 'antes' || T.moving; gH.visible = T.era === 'hoy' || T.moving;   // solo se dibuja la época en que estás (ahorra mucho en el Quest)
     toysH.hoverSet.clear(); toysP.hoverSet.clear();
     aimed = -1; if (xrOn) app.controllers.forEach((c) => { const a = village.pickStop(rayFrom(c)); if (a >= 0) aimed = a; }); else if (!dragLook) { const a = village.pickStop(raycaster); if (a >= 0) aimed = a; }
@@ -385,6 +442,19 @@ export async function createViaje(app) {
       p.m.rotation.set(0, Math.atan2(camW.x - p.m.position.x, camW.z - p.m.position.z), (p.work ? 0.05 * Math.sin(t * 3.4 + p.ph) : 0.012 * Math.sin(t * 0.9 + p.ph)) * (p.walk ? 0.3 : 1), 'YXZ');
       p.m.scale.set(p.pop * flip, p.pop * (1 + 0.012 * Math.sin(t * 1.7 + p.ph)), p.pop);
     }
+    // gonfoterio 3D: camina despacio por la orilla norte (para en los extremos y se da la vuelta)
+    { const gp = new THREE.Vector3(gonfoS.x, 0, gonfoS.z), on = pastAt(gp); gonfoS.pop += ((on ? 1 : 0) - gonfoS.pop) * Math.min(1, dt * 2.5); gonfo.group.visible = gonfoS.pop > 0.03;
+      if (gonfo.group.visible) {
+        const nx = gonfoX(t), vx = (nx - gonfoS.x) / Math.max(dt, 1e-3), spd = Math.min(1.1, Math.abs(vx)); gonfoS.x = nx; gonfoS.z = -(yc(nx) + halfw(nx) + 5.5);
+        const want = vx >= 0 ? Math.PI / 2 : -Math.PI / 2; if (spd > 0.08) { let d = want - gonfoS.head; d = Math.atan2(Math.sin(d), Math.cos(d)); gonfoS.head += d * Math.min(1, dt * 1.6); }
+        gonfoS.sp += (spd - gonfoS.sp) * Math.min(1, dt * 2); gonfo.update(t, dt, gonfoS.sp);
+        gonfo.group.position.set(gonfoS.x, ground(gonfoS.x, gonfoS.z), gonfoS.z); gonfo.group.rotation.y = gonfoS.head; gonfo.group.scale.setScalar(gonfoS.pop);
+      } else gonfoS.x = gonfoX(t); }
+    // historia del humo: el humo se espesa y muestra la imagen del capítulo que se está contando
+    { const live = humoLive() && T.era === 'antes' && !T.moving, ns = app.narr.state; HS.amt += ((live ? 1 : 0) - HS.amt) * Math.min(1, dt * 1.6);
+      if (live) { const ch = HS.map[Math.min(ns.idx, HS.map.length - 1)] ?? 0; if (ch !== HS.shown) { HS.fade -= dt * 2.4; if (HS.fade <= 0) { HS.fade = 0; HS.shown = ch; vision.material.map = visTex[ch]; vision.material.needsUpdate = true; } } else HS.fade = Math.min(1, HS.fade + dt * 2.4); }
+      vision.visible = fireG.visible && HS.amt > 0.02; vision.material.opacity = HS.amt * HS.fade * 0.96; const bob = 1 + Math.sin(t * 0.9) * 0.015; vision.scale.set(4.6 * bob, 2.875 * bob, 1); vision.position.y = 3.3 + Math.sin(t * 0.7) * 0.08;
+      const dl = camW.distanceTo(FIRE); humoLabel.visible = fireG.visible && !live && !app.narr.state.playing; humoLabel.material.opacity = THREE.MathUtils.clamp((7 - dl) / 2.5, 0, 1); }
     // fuego
     if (fireG.visible) {
       fireE += (0.8 - fireE) * Math.min(1, dt * 0.18);
@@ -395,7 +465,7 @@ export async function createViaje(app) {
       for (let i = 0; i < emberN; i++) { let y = ep[i * 3 + 1] + dt * (0.5 + eSeed[i]) * (0.6 + fireE * 0.5); if (y > 1.8 + fireE) y = 0.1; ep[i * 3 + 1] = y; ep[i * 3] += Math.sin(t * 2 + eSeed[i] * 9) * 0.0016; }
       eg.attributes.position.needsUpdate = true;
     }
-    if (fireG.visible) for (const sm of smoke) { sm.t += dt; if (sm.t > sm.dur) { sm.t = 0; sm.sx = Math.random() - 0.5; } const u = sm.t / sm.dur; sm.sp.position.set(sm.sx * u * 1.6 + u * 1.2, 0.9 + u * 3.2, Math.sin(sm.t + sm.sx * 9) * 0.25 * u); sm.sp.scale.setScalar(0.35 + u * 1.7); sm.sp.material.opacity = Math.sin(Math.PI * Math.min(1, u * 1.15)) * 0.2 * (0.5 + fireE * 0.5); }
+    if (fireG.visible) for (const sm of smoke) { sm.t += dt; if (sm.t > sm.dur) { sm.t = 0; sm.sx = Math.random() - 0.5; } const u = sm.t / sm.dur; sm.sp.position.set(sm.sx * u * 1.6 + u * 1.2, 0.9 + u * 3.2, Math.sin(sm.t + sm.sx * 9) * 0.25 * u); sm.sp.scale.setScalar((0.35 + u * 1.7) * (1 + HS.amt * 0.6)); sm.sp.material.opacity = Math.sin(Math.PI * Math.min(1, u * 1.15)) * 0.2 * (0.5 + fireE * 0.5) * (1 + HS.amt * 1.8); }
     if (motes.visible) { const pa = moteGeo.attributes.position.array; for (let i = 0; i < moteN; i++) { pa[i * 3 + 1] += Math.sin(t * 0.6 + moteSeed[i]) * 0.0016; pa[i * 3] += Math.cos(t * 0.4 + moteSeed[i] * 2) * 0.0014; pa[i * 3 + 2] += Math.sin(t * 0.3 + moteSeed[i] * 3) * 0.0012; } moteGeo.attributes.position.needsUpdate = true; }
     crystal.rotation.y = t * 0.8; cWire.rotation.set(t * 0.5, -t * 0.7, 0); crystal.position.y = crystalPos.y + Math.sin(t * 1.3) * 0.06;
     waterTex.offset.y -= dt * 0.3; foamTex.offset.y -= dt * 0.9;
@@ -420,12 +490,12 @@ export async function createViaje(app) {
   }
   const applyActive = (on) => {
     active = on; audio.listener.setMasterVolume(on ? 1 : 0);
-    if (on) { app.controllers.forEach((c) => rig.add(c)); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); camera.position.set(0, renderer.xr.isPresenting ? 0 : 1.62, 0); renderer.setClearColor(0x000000, 1); app.setInfo({ titulo: 'El viaje a Monte Verde', intro: 'Empiezas en el presente. Tira la palanca de la máquina del tiempo y viaja a un campamento de hace unos 14.800 años: camina por la orilla del río, siéntate junto al fuego, agarra la comida y escucha la clase.', hint: 'Palanca roja = viajar. Esferas luminosas = paradas (la clase te explica sola al acercarte). PC: arrastra para mirar, WASD camina, T = viajar, M = panel. Quest: joystick izq camina, der gira, gatillo = tirar la palanca / agarrar.' }); }
+    if (on) { app.controllers.forEach((c) => rig.add(c)); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); camera.position.set(0, renderer.xr.isPresenting ? 0 : 1.62, 0); renderer.setClearColor(0x000000, 1); app.setInfo({ titulo: 'El viaje a Monte Verde', intro: 'Empiezas en el presente. Tira la palanca de la máquina del tiempo y viaja a un campamento de hace unos 14.800 años: camina por la orilla del río, siéntate junto al fuego, toca el fuego para oír la historia del humo, agarra la comida y escucha la clase.', hint: 'Palanca roja = viajar. Esferas luminosas = paradas (la clase te explica sola al acercarte). Fuego = historia del humo. Panel > Arqueólogo = réplicas de lo que se encontró. PC: arrastra para mirar, WASD camina, T = viajar, H = historia del humo, M = panel. Quest: joystick izq camina (apretarlo = correr), der gira, gatillo = tirar la palanca / agarrar.' }); }
   };
-  window.__viaje = { THREE, scene, camera, rig, W, T, travel, ground, mv, peopleList, toysP, toysH, look: (y, p) => { yaw = y; pitch = p; } };
+  window.__viaje = { THREE, scene, camera, rig, W, T, travel, pullLever, startHumo, finds, gonfo, gonfoS, HS, ground, mv, peopleList, toysP, toysH, look: (y, p) => { yaw = y; pitch = p; } };
   await tick();
   return {
-    id: 'viaje', scene, camera, rig, update, hasAR: false, audio, startAudio, stops: VS, mv, village, hasToys: true,
+    id: 'viaje', scene, camera, rig, update, hasAR: false, audio, startAudio, stops: VS, mv, village, hasToys: true, finds,
     controls: {
       horas: ['Presente', 'Hace 14.800 años'], hora: () => (T.era === 'antes' || (T.moving && T.dir > 0) ? 1 : 0), setHora: (i) => { if (i === 1) { if (T.era === 'hoy') pullLever(); } else travel('hoy'); },
       sinDensidad: true, niebla: () => app.viajeNiebla || 1, setNiebla: (v) => { app.viajeNiebla = v; },
