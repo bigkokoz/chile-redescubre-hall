@@ -24,6 +24,8 @@
     #status { font-size:13px; min-height:1.4em; }
     label { display:block; font-size:12px; color:var(--mut); margin-top:6px; }
     input[type=range] { width:100%; }
+    details { color:var(--mut); font-size:13px; } summary { cursor:pointer; }
+    label.chk { display:flex; align-items:center; gap:8px; margin:4px 0; color:var(--fg); }
     #themes { display:flex; gap:6px; flex-wrap:wrap; }
     #themes button { padding:6px 10px; font-size:13px; border-radius:999px; }
     #themes button.on { border-color:var(--acc); }
@@ -45,6 +47,13 @@
     </div>
     <p id="status">Comprobando tu dispositivo…</p>
     <div id="extra"></div>
+    <details id="mov"><summary>Movimiento en VR</summary>
+      <label class="chk"><input type="checkbox" id="loco-joy"> Caminar con el joystick izquierdo</label>
+      <label class="chk"><input type="checkbox" id="loco-snap"> Girar por pasos (joystick derecho)</label>
+      <label class="chk"><input type="checkbox" id="loco-grab"> Arrastrar el mundo (gatillo o grip en el aire)</label>
+      <button id="loco-fis" style="margin-top:6px;padding:6px 10px;font-size:13px">Solo movimiento físico</button>
+      <p class="hint">Dentro del visor lo cambias desde el panel de bolsillo: mete la mano en la cadera y aprieta el grip.</p>
+    </details>
     <p class="hint" id="hint">Vista previa en PC: arrastra el fondo para mirar. Mantén el clic sobre un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo (clic corto en un disco = insertarlo). Teclas 1–4 = discos, 0 = volver a la casa, R = reponer objetos.</p>
   </div>
   <script type="module" src="/src/app.js"></script>

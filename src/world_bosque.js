@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as P from './papel.js';
-import { createToys, makeCup } from './juguetes.js';
+import { createToys, makeCup, makeOrb } from './juguetes.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
 
@@ -11,6 +11,7 @@ import { makeHud } from './hud.js';
 // ============================================================================
 
 export async function createBosque(app, cfg = {}) {
+const tick = () => new Promise((r) => setTimeout(r, 0));   // cede el hilo para no congelar el visor mientras se arma el mundo
 const { renderer, $, say } = app;
 cfg = { id: 'bosque', titulo: 'Bosque de papel', ...cfg };
 const ID = (k) => `${cfg.id}-${k}`;
@@ -112,6 +113,7 @@ treeRing(180, 36, 56, 11, 17, 0.9, 400);
 [1, 2].forEach((i) => cards(P.quilaCanvas(40 + i), 22, 4.5, 26, 2.0, 3.4, 0.25, 0.95, 700 + i));
 }
 
+await tick();
 // ---- suelo, hojarasca y ramitas ----
 {
   const gt = P.toTex(P.groundCanvas(3, ANT), true); gt.repeat.set(26, 26);
@@ -135,6 +137,7 @@ treeRing(180, 36, 56, 11, 17, 0.9, 400);
   tw.frustumCulled = false; scene.add(tw);
 }
 
+await tick();
 if (ANT) {
   // montículos de musgo lima y hongos
   const r = P.rng(909), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
@@ -211,6 +214,7 @@ lampGlow.scale.setScalar(1.4); lampGlow.position.copy(lantern.position); world.a
 const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.25, fog: false }));
 sunGlow.scale.setScalar(70); sunGlow.position.set(0, 16, -70); scene.add(sunGlow);
 
+await tick();
 // ---- física: herramientas, tazas y palitos sobre la mesa ----
 const solidsCasa = [
   { min: new THREE.Vector3(-2.2, 0, -2.2), max: new THREE.Vector3(2.2, DECK_H, 2.2) },
@@ -244,6 +248,12 @@ put('taza', makeCup(0xf2ead8), -0.5, 0.2, { r: 0.046, e: 0.25, upright: 'yaw', c
 for (let i = 0; i < 4; i++) put('palito', makeTwig(0.18 + i * 0.05), 0.1 + i * 0.1, -0.28, { r: 0.02, e: 0.3, yaw: i });
 // recoloca las herramientas sobre la mesa (la mesa está a TABLE.top; los objetos arrancan dormidos)
 
+// ---- orbes de luz (la partícula amarilla del hall): flotan, se agarran, se lanzan y rebotan ----
+[[-0.7, 1.55, 0.6], [0.3, 1.85, 0.95], [1.9, 1.6, 0.2], [-1.7, 1.35, -0.4], [0.8, 1.95, -1.5]].forEach(([dx, dy, dz]) => {
+  const o = makeOrb(); o.userData.parts.forEach((m) => m.color.set(0xffd23c));
+  toys.add('orbe', o, new THREE.Vector3(TABLE.x + dx, dy, TABLE.z + dz), { r: 0.07, e: 0.9, g: 0, drag: 0.7, roll: 0.5 });
+});
+await tick();
 // ---- copihues colgantes + enredaderas ----
 const flowerSpots = [];
 {
@@ -325,6 +335,7 @@ function picaUpdate(dt, t) {
 }
 picaNext();
 
+await tick();
 // ---- luciérnagas y lluvia ----
 const fireN = 170, fireGeo = new THREE.BufferGeometry(), firePos = new Float32Array(fireN * 3), fireSeed = [];
 { const r = P.rng(31); for (let i = 0; i < fireN; i++) { const a = r() * 6.283, rad = 1 + r() * 14; firePos.set([Math.cos(a) * rad, 0.3 + r() * 2.8, Math.sin(a) * rad], i * 3); fireSeed.push(r() * 6.28); } fireGeo.setAttribute('position', new THREE.BufferAttribute(firePos, 3)); }
@@ -350,7 +361,7 @@ const rainMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false,
 });
 const rain = new THREE.LineSegments(rainGeo, rainMat); rain.frustumCulled = false; scene.add(rain);
-let rainAmb = null, windAmb = null;
+let rainAmb = null, windAmb = null, grillos = null, chirpT = 5;
 
 // ---- estado de "hora" y clima (se mezclan suavemente) ----
 const look = { bg: new THREE.Color(HORAS[0].bg), fog: new THREE.Color(HORAS[0].fog), near: HORAS[0].near, far: HORAS[0].far, tint: new THREE.Color(1, 1, 1), hemi: 1, glow: new THREE.Color(0xffffff), glowOp: 0.25, fire: 0, mari: 1, rain: 0 };
@@ -373,6 +384,7 @@ function updateLook(dt) {
   lampGlow.material.opacity = Math.min(0.9, 0.08 + look.fire * 0.7);
   rainMat.uniforms.uOn.value = look.rain; rain.visible = look.rain > 0.02;
   if (rainAmb) rainAmb.setVolume(0.55 * look.rain);
+  if (grillos) grillos.setVolume(0.045 * look.fire);
 }
 function setHora(i) { PARAM.hora = i % HORAS.length; $(ID('hora')).textContent = `Hora: ${HORAS[PARAM.hora].n}`; }
 function toggleRain() { PARAM.lluvia = !PARAM.lluvia; $(ID('rain')).textContent = PARAM.lluvia ? 'Parar lluvia' : 'Llover'; startAudio(); }
@@ -385,7 +397,7 @@ let audioOn = false;
 async function startAudio() {
   if (audioOn) return; audioOn = true;
   await audio.start(new THREE.Object3D(), [], { pad: false });
-  windAmb = audio.ambient('viento', 0.25); rainAmb = audio.ambient('lluvia', 0); pica.st.buzz = audio.buzzer(pica.g, 0.5);
+  windAmb = audio.ambient('hojas', 0.1); grillos = audio.ambient('grillos', 0); rainAmb = audio.ambient('lluvia', 0); pica.st.buzz = audio.buzzer(pica.g, 0.5);
 }
 
 // ---- interacción: agarrar / lanzar y mover el mundo ----
@@ -404,7 +416,7 @@ controllers.forEach((c) => {
     startAudio();
     const it = pickToy(rayFrom(c));
     if (it) { toys.grab(it.b, c); held.set(c, it.b); line.visible = false; }
-    else if (!drag) drag = { c, prev: c.position.clone() };
+    else if (!drag && app.loco.grab) drag = { c, prev: c.position.clone() };
   };
   const end = () => {
     const b = held.get(c); if (b) { toys.release(b); held.delete(c); }
@@ -423,21 +435,22 @@ function locomotionXR(dt, cam) {
     const gp = src.gamepad; if (!gp) continue;
     const ax = gp.axes, hand = src.handedness;
     const x = dz(ax[2] || 0), y = dz(ax[3] || 0);
-    if (hand === 'left' && (x || y)) {
+    if (hand === 'left' && (x || y) && app.loco.joystick) {
       cam.getWorldQuaternion(yawQ); fwd.set(0, 0, -1).applyQuaternion(yawQ); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x);
-      rig.position.addScaledVector(fwd, -y * LOCO.velocidad * dt).addScaledVector(rgt, x * LOCO.velocidad * dt);
+      rig.position.addScaledVector(fwd, -y * app.loco.speed * dt).addScaledVector(rgt, x * app.loco.speed * dt);
     }
-    if (hand === 'right') {
-      if (Math.abs(x) > 0.7 && !snapLatch) { snapLatch = true; const a = -Math.sign(x) * THREE.MathUtils.degToRad(LOCO.giroGrados); rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; }
+    if (hand === 'right' && app.loco.snap) {
+      if (Math.abs(x) > 0.7 && !snapLatch) { snapLatch = true; const a = -Math.sign(x) * THREE.MathUtils.degToRad(app.loco.snapDeg); rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; }
       else if (Math.abs(x) < 0.3) snapLatch = false;
     }
     const b = gp.buttons;
     const edge = (idx, fn) => { const key = hand + idx; const on = !!(b[idx] && b[idx].pressed); if (on && !btnLatch[key]) fn(); btnLatch[key] = on; };
     edge(4, toggleRain); edge(5, () => setHora(PARAM.hora + 1));
   }
+  if (drag && !app.loco.grab) drag = null;
   if (drag) {                                  // arrastrar el mundo: la mano se queda y el mundo se mueve hacia ti
     const cur = drag.c.position, d = drag.prev.clone().sub(cur); d.y = 0;
-    d.applyQuaternion(rig.quaternion).multiplyScalar(LOCO.agarreGanancia); rig.position.add(d); drag.prev.copy(cur);
+    d.applyQuaternion(rig.quaternion).multiplyScalar(app.loco.gain); rig.position.add(d); drag.prev.copy(cur);
   }
 }
 function groundHeight(x, z) {
@@ -490,7 +503,7 @@ function update(dt) {
     const idle = performance.now() - lastInput > 4000; idleBlend += ((idle ? 1 : 0) - idleBlend) * Math.min(1, dt * (idle ? 0.6 : 4));
     camera.rotation.set(pitch + idleBlend * 0.08 * Math.sin(t * 0.13), yaw + idleBlend * 0.9 * Math.sin(t * 0.09), 0, 'YXZ');
     camera.position.set(idleBlend * 0.35 * Math.sin(t * 0.11), 1.62, idleBlend * 0.25 * Math.sin(t * 0.07));
-    const sp = (keys.has('shift') ? 2 : 1) * LOCO.velocidad * dt;
+    const sp = (keys.has('shift') ? 2 : 1) * app.loco.speed * dt;
     fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); rgt.set(-fwd.z, 0, fwd.x);
     if (keys.has('w') || keys.has('arrowup')) rig.position.addScaledVector(fwd, sp); if (keys.has('s') || keys.has('arrowdown')) rig.position.addScaledVector(fwd, -sp);
     if (keys.has('d') || keys.has('arrowright')) rig.position.addScaledVector(rgt, sp); if (keys.has('a') || keys.has('arrowleft')) rig.position.addScaledVector(rgt, -sp);
@@ -508,6 +521,8 @@ function update(dt) {
   const camW = cam.getWorldPosition(tmpV).clone();
   rainMat.uniforms.uT.value = t; rainMat.uniforms.uCam.value.copy(camW);
   picaUpdate(dt, t);
+  chirpT -= dt;
+  if (chirpT <= 0 && audioOn && look.fire < 0.5 && look.rain < 0.3) { chirpT = 4 + Math.random() * 9; const a = Math.random() * 6.283, d = 6 + Math.random() * 9; try { audio.sfx('chirp', new THREE.Vector3(camW.x + Math.cos(a) * d, 3 + Math.random() * 4, camW.z + Math.sin(a) * d), 0.3); } catch { /* sin audio */ } }
   for (const b of butter) {
     const f = (tt) => tmpV2.set(b.c.x + Math.sin(tt * b.a[0] + b.p[0]) * b.R1, b.c.y + Math.sin(tt * b.a[1] + b.p[1]) * 0.45, b.c.z + Math.cos(tt * b.a[2] + b.p[2]) * b.R1);
     const p0 = f(t).clone(), p1 = f(t + 0.08);
@@ -526,8 +541,12 @@ function applyActive(on) {
   if (on) { controllers.forEach((c) => rig.add(c)); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); camera.position.set(0, renderer.xr.isPresenting ? 0 : 1.62, 0); if (renderer.xr.isPresenting) hudUntil = performance.now() + 25000; renderer.setClearColor(0x000000, 1); app.setInfo({ titulo: cfg.titulo, intro: cfg.intro || '', hint: cfg.hint || '' }); }
 }
 window.__bosque = { THREE, scene, camera, rig, toys, PARAM, LOCO, setHora, toggleRain, setDensidad, pica, look: (y, p) => { yaw = y; pitch = p; } };
+const setNiebla = (v) => { PARAM.niebla = v; const el = $(ID('niebla')); if (el) el.value = v; };
+const setDens = (v) => { setDensidad(v); const el = $(ID('dens')); if (el) el.value = v; };
+await tick();
 return {
   id: cfg.id, scene, camera, update, hasAR: false,
+  controls: { horas: HORAS.map((h) => h.n), hora: () => PARAM.hora, setHora, lluvia: () => PARAM.lluvia, toggleRain, densidad: () => PARAM.densidad, setDensidad: setDens, niebla: () => PARAM.niebla, setNiebla },
   enter: () => applyActive(true), exit: () => applyActive(false),
   onXRStart: () => { camera.position.set(0, 0, 0); hudUntil = performance.now() + 25000; }, onXRStop: () => { camera.position.set(0, 1.62, 0); },
 };

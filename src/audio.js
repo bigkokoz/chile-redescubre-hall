@@ -50,6 +50,8 @@ function makeSfx(ctx) {
     buzz: mk(2.0, (t) => (S(220, t) + 0.6 * S(440, t) + 0.35 * S(660, t)) * (0.55 + 0.45 * S(55, t)) * 0.22),
     lluvia: mk(4.0, () => noise() * 0.5),
     viento: (() => { let a = 0; return mk(6.0, (t) => { a += (noise() - a) * 0.02; return a * (0.7 + 0.3 * S(1 / 6, t)) * 2.2; }); })(),
+    hojas: (() => { let prev = 0; return mk(6.0, (t) => { const n = noise(); const y = (n - prev) * 0.5; prev = n; return y * (0.35 + 0.65 * Math.abs(S(1 / 6, t))) * 0.9; }); })(),
+    grillos: mk(3.0, (t) => S(4300, t) * (S(18, t) > 0.15 ? 1 : 0) * (0.55 + 0.45 * S(1, t)) * 0.5),
     chirp: mk(0.3, (t) => S(3200 + 2200 * Math.sin(t * 28) , t) * Math.exp(-t * 9) * (0.5 + 0.5 * Math.sin(t * 90)) * 0.28 * Math.min(1, t * 200)),
   };
 }

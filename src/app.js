@@ -3,7 +3,7 @@ import { maybeInstallEmulator } from './emu.js';
 import { createCasa } from './world_casa.js';
 import { createBosque } from './world_bosque.js';
 import { mountMenu, ESCENAS, vrButtonHTML, arButtonHTML } from './menu.js';
-import { createVRMenu } from './vrmenu.js';
+import { createBody, createPanel } from './bolsillo.js';
 
 // ============================================================================
 // Hall: una sola página, un solo visor, varias escenas. Cambiar de escena NO cierra la sesión VR.
@@ -30,10 +30,16 @@ const controllers = [0, 1].map((i) => {
   return c;
 });
 
-const vrMenu = createVRMenu();
+// Cómo te mueves (se cambia desde el panel de bolsillo o desde las casillas del escritorio; se recuerda)
+const LOCO_DEF = { joystick: true, snap: true, grab: true, speed: 2.2, gain: 1.6, snapDeg: 30 };
+let savedLoco = {}; try { savedLoco = JSON.parse(localStorage.getItem('hall.loco') || '{}'); } catch { /* sin guardado */ }
+const loco = { ...LOCO_DEF, ...savedLoco };
+const saveLoco = () => { try { localStorage.setItem('hall.loco', JSON.stringify(loco)); } catch { /* ignorar */ } syncLocoDom(); };
 const app = {
-  renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0,
-  menuOpen: () => vrMenu.open,
+  renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco,
+  menuOpen: () => panel.blocking,
+  selectScene: (id) => select(id),
+  activeControls: () => (active && active.controls) || null,
   setInfo: ({ titulo, intro, hint }) => { $('titulo').textContent = titulo || ''; $('intro').textContent = intro || ''; $('hint').textContent = hint || ''; },
 };
 
@@ -43,24 +49,27 @@ const FACTORY = {
   bosque: () => createBosque(app, { id: 'bosque', titulo: 'Bosque de papel', intro: 'Un taller en medio del bosque valdiviano. Camina, agarra herramientas y tazas, mira las mariposas y espera al picaflor.', hint: BOSQUE_HINT }),
   antiguo: () => createBosque(app, { id: 'antiguo', tipo: 'antiguo', titulo: 'Bosque antiguo', intro: 'Troncos enormes con raíces y musgo bajo la niebla verde. Un tocón hace de mesa de taller.', hint: BOSQUE_HINT }),
 };
-const worlds = {}; let active = null, xrKind = null, loading = null;
+const panel = createPanel(app);
+const body = createBody(controllers);
+const worlds = {}, loads = {}; let active = null, xrKind = null;
 const menu = mountMenu({ onSelect: (id) => select(id), onVR: async (id) => { await select(id); startXR('vr'); }, onAR: async (id) => { await select(id); startXR('ar'); } });
 $('btnVR').innerHTML = vrButtonHTML; $('btnAR').innerHTML = arButtonHTML;
 
-async function load(id) {
-  if (worlds[id]) return worlds[id];
-  say(`Cargando ${ESCENAS.find((e) => e.id === id).titulo}…`);
-  worlds[id] = await FACTORY[id]();
-  say('Listo.');
-  return worlds[id];
+function load(id) {
+  // una sola carga por escena (si dos llamadas coinciden, comparten la misma promesa)
+  return (loads[id] ??= (async () => {
+    say(`Cargando ${ESCENAS.find((e) => e.id === id).titulo}…`);
+    worlds[id] = await FACTORY[id]();
+    say('Listo.');
+    return worlds[id];
+  })());
 }
 async function select(id) {
   if (active && active.id === id) return;
-  if (loading) await loading;
-  loading = load(id); const w = await loading; loading = null;
-  if (active) { active.exit(); vrMenu.hide(); }
-  active = w; w.enter(xrKind);
-  menu.setCurrent(id); vrMenu.setCurrent(id);
+  const w = await load(id);
+  if (active) { active.exit(); panel.hide(); active.scene.remove(body.group); }
+  active = w; w.enter(xrKind); w.scene.add(body.group);
+  menu.setCurrent(id); panel.setCurrent(id);
   const u = new URL(location.href); u.searchParams.set('escena', id); u.searchParams.delete('vr'); u.searchParams.delete('ar'); history.replaceState(null, '', u);
   if (xrKind) w.onXRStart && w.onXRStart(xrKind === 'ar' && !w.hasAR ? 'vr' : xrKind);
   say('Listo.');
@@ -75,7 +84,7 @@ async function startXR(kind) {
   try {
     const session = await navigator.xr.requestSession(kind === 'ar' ? 'immersive-ar' : 'immersive-vr', init);
     app.features = session.enabledFeatures ? [...session.enabledFeatures] : [];
-    session.addEventListener('end', () => { xrKind = null; setPresenting(false); active && active.onXRStop && active.onXRStop(); vrMenu.hide(); say('Sesión terminada.'); });
+    session.addEventListener('end', () => { xrKind = null; setPresenting(false); active && active.onXRStop && active.onXRStop(); panel.hide(); say('Sesión terminada.'); });
     await renderer.xr.setSession(session);
     xrKind = kind; setPresenting(true); active.onXRStart && active.onXRStart(kind === 'ar' && !active.hasAR ? 'vr' : kind);
   } catch (err) { console.error(err); say(`No se pudo iniciar ${kind.toUpperCase()}: ${err.message || err}`); }
@@ -91,25 +100,38 @@ let support = { ar: false, vr: false };
   say(ar || vr ? `Listo: ${ar ? 'AR (passthrough)' : ''}${ar && vr ? ' y ' : ''}${vr ? 'VR' : ''} disponible.` : 'Tu navegador tiene WebXR pero ninguna sesión disponible. Vista previa.');
 })();
 
-// ---- menú dentro del visor ----
+// ---- panel de bolsillo dentro del visor ----
 controllers.forEach((c) => {
-  c.addEventListener('selectstart', () => {
-    if (!vrMenu.open) return;
-    app.suppressUntil = performance.now() + 150;
-    const i = vrMenu.pick(c);
-    if (i >= 0) { vrMenu.hide(); select(ESCENAS[i].id); }
+  c.addEventListener('selectstart', () => {          // gatillo: pulsar un botón del panel
+    if (!panel.visible) return;
+    const i = panel.pick(c);
+    if (i >= 0) { app.suppressUntil = performance.now() + 150; panel.click(i); }
   });
+  c.addEventListener('squeezestart', () => {         // grip con la mano en un bolsillo: sacar el panel
+    if (!active || !renderer.xr.isPresenting) return;
+    const p = c.getWorldPosition(new THREE.Vector3());
+    if (body.nearPocket(p) >= 0) { app.suppressUntil = performance.now() + 250; panel.hold(c, active.scene); }
+  });
+  c.addEventListener('squeezeend', () => { if (panel.holder === c) panel.release(); });
 });
 const latch = {};
 function pollXRInput() {
   const session = renderer.xr.getSession(); if (!session) return;
   for (const src of session.inputSources) {
-    const gp = src.gamepad; if (!gp || !gp.buttons[3]) continue;     // clic del joystick = abrir/cerrar el menú
+    const gp = src.gamepad; if (!gp || !gp.buttons[3]) continue;     // clic del joystick = panel delante de ti / mandarlo a volar
     const on = !!gp.buttons[3].pressed, key = src.handedness;
-    if (on && !latch[key]) { app.suppressUntil = performance.now() + 150; if (vrMenu.open) vrMenu.hide(); else vrMenu.show(active.scene, renderer.xr.getCamera()); }
+    if (on && !latch[key]) { app.suppressUntil = performance.now() + 150; if (panel.visible) panel.release(); else panel.showFront(active.scene, renderer.xr.getCamera()); }
     latch[key] = on;
   }
 }
+// casillas de movimiento del escritorio
+const LOCO_DOM = { 'loco-joy': 'joystick', 'loco-snap': 'snap', 'loco-grab': 'grab' };
+function syncLocoDom() { Object.entries(LOCO_DOM).forEach(([id, k]) => { const el = $(id); if (el) el.checked = !!loco[k]; }); }
+Object.entries(LOCO_DOM).forEach(([id, k]) => { const el = $(id); if (el) el.onchange = () => { loco[k] = el.checked; saveLoco(); }; });
+if ($('loco-fis')) $('loco-fis').onclick = () => { loco.joystick = loco.snap = loco.grab = false; saveLoco(); };
+syncLocoDom();
+window.addEventListener('error', (e) => say('Error: ' + (e.message || e)));
+window.addEventListener('unhandledrejection', (e) => say('Error: ' + ((e.reason && e.reason.message) || e.reason)));
 
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); Object.values(worlds).forEach((w) => { w.camera.aspect = innerWidth / innerHeight; w.camera.updateProjectionMatrix(); }); });
 
@@ -117,8 +139,6 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); Ob
 const q = new URLSearchParams(location.search);
 const first = FACTORY[q.get('escena')] ? q.get('escena') : 'casa';
 await select(first);
-// precarga las otras escenas livianas en segundo plano (el botón VR de otra tarjeta entra más rápido)
-setTimeout(() => ESCENAS.filter((e) => e.id !== first && e.id !== 'casa').reduce((p, e) => p.then(() => new Promise((r) => setTimeout(r, 600))).then(() => load(e.id)).catch(() => {}), Promise.resolve()), 2500);
 if (q.has('vr') || q.has('ar')) {
   const kind = q.has('vr') ? 'vr' : 'ar';
   const d = document.createElement('div'); d.id = 'splash';
@@ -129,10 +149,20 @@ if (q.has('vr') || q.has('ar')) {
 
 // ---- bucle ----
 const clock = new THREE.Clock();
+let errCount = 0;
 renderer.setAnimationLoop((_, frame) => {
   const dt = Math.min(clock.getDelta(), 0.1);
-  if (renderer.xr.isPresenting) { pollXRInput(); vrMenu.update(controllers); }
-  active.update(dt, frame);
-  renderer.render(active.scene, active.camera);
+  try {
+    const xr = renderer.xr.isPresenting;
+    body.group.visible = xr;
+    if (xr) {
+      pollXRInput();
+      const cam = renderer.xr.getCamera();
+      body.update(dt, cam.getWorldPosition(new THREE.Vector3()), cam.getWorldDirection(new THREE.Vector3()));
+    }
+    panel.update(dt, controllers);
+    active.update(dt, frame);
+  } catch (e) { if (errCount++ < 5) { console.error(e); say('Error en la escena: ' + (e.message || e)); } }
+  renderer.render(active.scene, active.camera);      // siempre se dibuja, aunque algo falle
 });
-window.__app = { app, worlds, select, startXR, renderer, vrMenu, get active() { return active; } };
+window.__app = { app, worlds, select, startXR, renderer, panel, body, loco, get active() { return active; } };

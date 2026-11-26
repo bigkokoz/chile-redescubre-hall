@@ -3,7 +3,7 @@
 Hall de entrada WebXR para el concurso **Chile Re-Descubre** (Taller de Diseño de Interfaces, UAI, Unidad 3).
 Entras a una **casa futurista con terraza** abierta a una selva infinita (360°). Sobre el escritorio hay una computadora y un rack con **cuatro discos**: agarras uno, lo metes en la ranura y una **línea de luz** recorre la casa y el paisaje transformándolos en el ambiente del disco (Autopoiesis, Desierto, Mar, Bosque). En **realidad mixta (passthrough)** la estación de discos aparece en miniatura sobre tu mesa real y los planos detectados (piso, paredes, mesas) se visten con el ambiente.
 
-> Estado: v0.6 (una sola página con 3 escenas, menú de escenas dentro del visor, Bosque antiguo). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
+> Estado: v0.7 (cuerpo + panel de bolsillo en VR, movimiento configurable, orbes en los bosques). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
 
 ## Versiones guardadas (etiquetas de git)
 | Etiqueta | Qué es |
@@ -13,6 +13,7 @@ Entras a una **casa futurista con terraza** abierta a una selva infinita (360°)
 | `v0.3-fisica` | Física de juguetes: lanzar, tazas que se rompen, pelotas, orbes, pájaros |
 | `v0.4-bosque` | Mundo 2: bosque de papel recorrible |
 | `v0.5-menu` | Selector de escenas, recorrido automático de la cámara, botones VR/AR con logo |
+| `v0.7-bolsillo` | Cuerpo con bolsillos: sacas el panel con el grip, al soltarlo flota hacia arriba; páginas Escenas / Movimiento (activar o apagar joystick, giro, arrastre, solo físico) / Mundo (hora, lluvia, densidad); orbes amarillos en los bosques; carga sin congelar el visor |
 | `v0.6-escenas-vr` | Una sola página con 3 escenas (Casa, Bosque de papel, Bosque antiguo); menú 3D dentro del visor (clic del joystick) que cambia de escena sin cerrar el VR |
 
 Para volver a una versión: `git checkout v0.3-fisica` (y `npm run build`). El menú de escenas del sitio (`src/menu.js`) lista las escenas activas; agregar una escena = una página nueva + una entrada en `ESCENAS`.
