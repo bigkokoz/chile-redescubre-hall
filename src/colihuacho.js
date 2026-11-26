@@ -18,7 +18,7 @@ export function createCompanion(app) {
   g.add(core, shellA, shellB, glow, hit);
 
   const S = { mode: 'perch', vel: new THREE.Vector3(), freeT: 0, holder: null, hist: [], lead: null, hum: null, audio: null, sceneRef: null, wait: 0 };
-  const tmp = new THREE.Vector3(), perch = new THREE.Vector3(), rgt = new THREE.Vector3();
+  const tmp = new THREE.Vector3(), perch = new THREE.Vector3(), rgt = new THREE.Vector3(), tmpFw = new THREE.Vector3();
   const rc = new THREE.Raycaster();
 
   function stopHum() { if (S.hum) { try { S.hum.stop(); } catch { /* ya parado */ } g.remove(S.hum); S.hum = null; } }
@@ -50,7 +50,8 @@ export function createCompanion(app) {
     unlead() { S.lead = null; if (S.mode === 'lead') { S.mode = 'free'; S.freeT = 0.7; } },
     update(dt, camPos, camDir, t) {
       rgt.set(-camDir.z, 0, camDir.x).normalize();
-      perch.copy(camPos).addScaledVector(rgt, 0.3).addScaledVector(camDir, -0.04); perch.y -= 0.13;
+      // se posa adelante y a tu derecha, al alcance de la mano (antes quedaba detrás del hombro y no se veía); no baja a los menús de las piernas
+      perch.copy(camPos).addScaledVector(rgt, 0.34); tmpFw.set(camDir.x, 0, camDir.z).normalize(); perch.addScaledVector(tmpFw, 0.42); perch.y -= 0.22;
       perch.y += Math.sin(t * 1.7) * 0.012; perch.x += Math.sin(t * 1.1) * 0.01;
       if (S.mode === 'perch') { g.position.lerp(perch, 1 - Math.exp(-7 * dt)); }
       else if (S.mode === 'free') {
