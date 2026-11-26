@@ -47,7 +47,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const tmpN = new THREE.Vector3(), tmpD = new THREE.Vector3(), tmpC = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion();
 const tmpE = new THREE.Euler();
 
-function makeCup(color) {
+export function makeCup(color) {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.0, side: THREE.DoubleSide });
   g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.032, 0.09, 20, 1, true), mat), { name: 'Taza::Cuerpo' }));
@@ -59,7 +59,7 @@ function makeCup(color) {
   g.traverse((o) => { o.castShadow = false; });
   return g;
 }
-function makeBall(color) {
+export function makeBall(color) {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, emissive: color, emissiveIntensity: 0.18 });
   g.add(new THREE.Mesh(new THREE.SphereGeometry(0.04, 18, 14), mat));
@@ -67,7 +67,7 @@ function makeBall(color) {
   band.rotation.x = Math.PI / 2; g.add(band);
   return g;
 }
-function makeOrb() {
+export function makeOrb() {
   const g = new THREE.Group();
   const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
   const halo = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
@@ -76,8 +76,11 @@ function makeOrb() {
   return g;
 }
 
-export function createToys({ casa, audio }) {
-  const parent = casa.estacion;
+export function createToys({ casa = null, audio, parent: parentOpt = null, solids = null, onFloor: floorFn = null, defaults = true }) {
+  const parent = parentOpt || casa.estacion;
+  const SOL = solids || SOLIDS;
+  const FLOOR = floorFn || onFloor;
+  const discList = casa ? casa.discs : [];
   const all = [];          // juguetes
   const frags = [];        // pedazos que se rompen
   const shardGeo = new THREE.TetrahedronGeometry(0.028);
@@ -99,6 +102,7 @@ export function createToys({ casa, audio }) {
   }
 
   // ---- los juguetes ----
+  if (defaults) {
   [0xf2ead8, 0xc4623a, 0x2f8f8a].forEach((c, i) => {
     add('taza', makeCup(c), V([1.12, 1.34, 1.24][i], 0.845, [-1.1, -1.12, -1.0][i]), { r: 0.046, e: 0.25, upright: 'yaw', color: c, roll: 7 });
   });
@@ -108,6 +112,7 @@ export function createToys({ casa, audio }) {
   [[-1.55, 1.2, -1.25], [1.6, 1.25, -1.25], [0.0, 1.75, -1.6]].forEach((p) => {
     add('orbe', makeOrb(), V(...p), { r: 0.06, e: 0.9, g: 0, drag: 0.7, roll: 0.5 });
   });
+  }
 
   // ---- sonido / efectos ----
   const sfx = (kind, b, vol = 1) => { try { audio.sfx(kind, worldPos(b.obj || b), vol); } catch { /* sin audio aún */ } };
@@ -159,9 +164,9 @@ export function createToys({ casa, audio }) {
 
   function collide(b) {
     const p = b.obj.position, r = b.r;
-    if (p.y - r < 0 && p.y > -0.4 && onFloor(p.x, p.z)) contact(b, UP, r - p.y);
-    for (let i = 0; i < SOLIDS.length; i++) {
-      const s = SOLIDS[i];
+    if (p.y - r < 0 && p.y > -0.4 && FLOOR(p.x, p.z)) contact(b, UP, r - p.y);
+    for (let i = 0; i < SOL.length; i++) {
+      const s = SOL[i];
       if (p.x + r < s.min.x || p.x - r > s.max.x || p.y + r < s.min.y || p.y - r > s.max.y || p.z + r < s.min.z || p.z - r > s.max.z) continue;
       tmpC.set(clamp(p.x, s.min.x, s.max.x), clamp(p.y, s.min.y, s.max.y), clamp(p.z, s.min.z, s.max.z));
       tmpD.copy(p).sub(tmpC);
@@ -244,7 +249,7 @@ export function createToys({ casa, audio }) {
   }
 
   const api = {
-    all,
+    all, add, reset,
     pickables: () => all.filter((b) => b.state === 'free' && b.obj.visible && b.pop >= 0.95).flatMap((b) => { const ms = []; b.obj.traverse((m) => { if (m.isMesh) ms.push(m); }); return ms; }),
     track, untrack,
     grab(b, hand) {
@@ -276,7 +281,7 @@ export function createToys({ casa, audio }) {
       while (accum >= DT && n++ < 8) {
         accum -= DT;
         for (const b of all) if (b.state === 'free') step(b, DT);
-        casa.discs.forEach((d) => { if (d.state === 'free') step(discBody(d), DT); });
+        discList.forEach((d) => { if (d.state === 'free') step(discBody(d), DT); });
         for (let i = frags.length - 1; i >= 0; i--) { const f = frags[i]; if (!f.sleep) step(f, DT); }
       }
       if (n >= 8) accum = 0;
@@ -294,7 +299,7 @@ export function createToys({ casa, audio }) {
         b.obj.scale.setScalar(pe * (1 + 0.12 * b.hover));
       }
       // discos lanzados: vuelven al rack al tocar el piso (o si se pierden)
-      casa.discs.forEach((d) => {
+      discList.forEach((d) => {
         if (d.state !== 'free') return;
         d.freeT = (d.freeT || 0) + dt;
         const b = discBody(d);

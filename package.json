@@ -10,7 +10,9 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
-    "three": "^0.187.0"
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "three": "^0.187.0",
+    "three-mesh-bvh": "^0.10.0"
   },
   "devDependencies": {
     "@iwer/devui": "^2.8.0",

@@ -17,6 +17,12 @@ Entras a una **casa futurista con terraza** abierta a una selva infinita (360°)
 - **Pájaros:** una bandada cruza la sala por el ventanal cada ~30 s y otras pasan lejos por el cielo; su color cambia con el ambiente.
 - Física propia y liviana (esferas contra cajas, 120 Hz) en `src/juguetes.js`; sonidos procedurales en `src/audio.js`; pájaros en `src/pajaros.js`. Tecla **R** repone los objetos.
 
+## Mundo 2: Bosque de papel (`bosque.html`)
+Escena recorrible en estilo **papel recortado en capas** (bosque valdiviano): árboles latifoliados, alerces, helechos, nalca, quila, copihues, hojarasca y ramitas, todo generado por código (`src/papel.js`, `src/bosque.js`). Un **taller** de madera sobre una plataforma con herramientas, tazas y palitos agarrables (misma física del hall), mariposas, un **picaflor chico** que visita los copihues y cruza frente a tu cara, hora del día (mañana, dorada, noche con luciérnagas) y **lluvia**.
+- **Quest:** joystick izquierdo camina, derecho gira por pasos, gatillo/grip en el aire arrastra el mundo, A = lluvia, B = hora. Además puedes caminar de verdad dentro de tu área.
+- **PC:** WASD + arrastrar para mirar, clic sostenido para agarrar y lanzar, L = lluvia, H = hora, R = reponer.
+- Parámetros ajustables en `LOCO` y `PARAM` (velocidad, giro, ganancia del agarre, densidad, niebla).
+
 ## Cómo se hizo
 1. **Blender 5.3** (modelado procedural por script, conectado con MCP): casa, mobiliario, escritorio curvo, computadores, discos y jungla de ~3.600 árboles.
 2. **Luz horneada** (`herramientas/hornear_sala.py`): Cycles hornea la iluminación completa (directa + indirecta + emisión) en un atlas de textura y exporta GLB. En el visor se muestra sin luces en tiempo real → entra en la GPU de un Quest 2.

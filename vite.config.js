@@ -9,5 +9,5 @@ export default defineConfig({
   base: './', // rutas relativas: funciona igual en GitHub Pages
   plugins: useSsl ? [basicSsl()] : [],
   server: { host: true, port: 5173 },
-  build: { target: 'es2022', chunkSizeWarningLimit: 1500 },
+  build: { target: 'es2022', chunkSizeWarningLimit: 1500, rollupOptions: { input: { main: 'index.html', bosque: 'bosque.html' } } },
 });

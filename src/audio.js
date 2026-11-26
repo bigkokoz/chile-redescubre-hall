@@ -47,6 +47,9 @@ function makeSfx(ctx) {
     clink: mk(0.3, (t) => (S(3180, t) * 0.22 + S(4710, t) * 0.14) * Math.exp(-t * 30) + S(170, t) * Math.exp(-t * 35) * 0.5 + noise() * Math.exp(-t * 80) * 0.2),
     bounce: mk(0.22, (t) => S(300 - 800 * t, t) * Math.exp(-t * 22) * 0.7),
     pop: mk(0.22, (t) => S(480 + 1800 * t, t) * Math.exp(-t * 14) * 0.45),
+    buzz: mk(2.0, (t) => (S(220, t) + 0.6 * S(440, t) + 0.35 * S(660, t)) * (0.55 + 0.45 * S(55, t)) * 0.22),
+    lluvia: mk(4.0, () => noise() * 0.5),
+    viento: (() => { let a = 0; return mk(6.0, (t) => { a += (noise() - a) * 0.02; return a * (0.7 + 0.3 * S(1 / 6, t)) * 2.2; }); })(),
     chirp: mk(0.3, (t) => S(3200 + 2200 * Math.sin(t * 28) , t) * Math.exp(-t * 9) * (0.5 + 0.5 * Math.sin(t * 90)) * 0.28 * Math.min(1, t * 200)),
   };
 }
@@ -70,7 +73,7 @@ export class HallAudio {
     a.setBuffer(this.bufs[kind]); a.setVolume(vol); a.play();
   }
   /** Llamar dentro de un gesto del usuario (clic / entrar a XR). */
-  async start(coreObject, portalObjects) {
+  async start(coreObject, portalObjects, opts = {}) {
     if (this.started) return;
     this.started = true;
     const ctx = THREE.AudioContext.getContext();
@@ -80,6 +83,7 @@ export class HallAudio {
       const h = new THREE.Object3D(); this.sfxRoot.add(h);
       const a = new THREE.PositionalAudio(this.listener); a.setRefDistance(1.2); a.setRolloffFactor(1.1); h.add(a); this.pool.push(a);
     }
+    if (opts.pad === false) return;
     this.pad = new THREE.PositionalAudio(this.listener);
     this.pad.setBuffer(makePadBuffer(ctx));
     this.pad.setLoop(true);
@@ -98,6 +102,16 @@ export class HallAudio {
       p.add(a);
       this.chimes[i] = a;
     });
+  }
+  /** Ambiente no posicional en bucle ('lluvia' | 'viento'); devuelve el nodo para subir/bajar el volumen. */
+  ambient(kind, vol = 0.3) {
+    if (!this.bufs) return null;
+    const a = new THREE.Audio(this.listener); a.setBuffer(this.bufs[kind]); a.setLoop(true); a.setVolume(vol); a.play(); return a;
+  }
+  /** Zumbido posicional pegado a un objeto (picaflor). */
+  buzzer(obj, vol = 0.5) {
+    if (!this.bufs) return null;
+    const a = new THREE.PositionalAudio(this.listener); a.setBuffer(this.bufs.buzz); a.setLoop(true); a.setRefDistance(0.5); a.setRolloffFactor(1.6); a.setVolume(vol); obj.add(a); a.play(); return a;
   }
   chime(i) {
     const a = this.chimes[i];
