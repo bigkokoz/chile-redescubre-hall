@@ -3,8 +3,6 @@ import * as P from './papel.js';
 import { createToys, makeCup } from './juguetes.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
-import { maybeInstallEmulator } from './emu.js';
-import { mountMenu, maybeSplash, vrButtonHTML } from './menu.js';
 
 // ============================================================================
 // BOSQUE DE PAPEL — mundo recorrible (VR). Estilo "papel recortado en capas":
@@ -12,9 +10,14 @@ import { mountMenu, maybeSplash, vrButtonHTML } from './menu.js';
 // repartidas en anillos de profundidad. Todo se genera por código: nada que descargar.
 // ============================================================================
 
-const $ = (id) => document.getElementById(id);
-const say = (t) => { $('status').textContent = t; };
-await maybeInstallEmulator();
+export async function createBosque(app, cfg = {}) {
+const { renderer, $, say } = app;
+cfg = { id: 'bosque', titulo: 'Bosque de papel', ...cfg };
+const ID = (k) => `${cfg.id}-${k}`;
+const panel = document.createElement('div'); panel.style.display = 'none';
+panel.innerHTML = `<div class="row"><button id="${ID('rain')}">Llover</button><button id="${ID('hora')}">Hora: mañana</button></div><label>Densidad de plantas <input type="range" id="${ID('dens')}" min="0.2" max="1" step="0.05" value="1"></label><label>Niebla <input type="range" id="${ID('niebla')}" min="0.4" max="2" step="0.05" value="1"></label>`;
+app.extra.appendChild(panel);
+let active = false;
 
 // ---- parámetros que se pueden tocar ----
 const PARAM = { densidad: 1, niebla: 1, hora: 0, lluvia: false };
@@ -25,26 +28,25 @@ const LOCO = {
   zonaMuerta: 0.15,
   radioMax: 48,
 };
-const HORAS = [
+const ANT = cfg.tipo === 'antiguo';
+const HORAS = ANT ? [
+  { n: 'mañana', bg: 0xdcf0bc, fog: 0xd6edb2, near: 2, far: 32, tint: [1.02, 1.07, 0.92], hemi: 1.0, glow: 0xf6ffd0, glowOp: 0.3, fire: 0, mariposas: 1 },
+  { n: 'hora dorada', bg: 0xf2e0a0, fog: 0xe6d596, near: 3, far: 64, tint: [1.12, 1.02, 0.76], hemi: 0.9, glow: 0xffd070, glowOp: 0.7, fire: 0.25, mariposas: 1 },
+  { n: 'noche', bg: 0x061208, fog: 0x0a1c0c, near: 2, far: 36, tint: [0.4, 0.62, 0.5], hemi: 0.45, glow: 0x9fffa0, glowOp: 0.12, fire: 1, mariposas: 0 },
+] : [
   { n: 'mañana', bg: 0xcfe3c4, fog: 0xcfe3c4, near: 3, far: 62, tint: [1, 1, 1], hemi: 1.0, glow: 0xffffff, glowOp: 0.25, fire: 0, mariposas: 1 },
   { n: 'hora dorada', bg: 0xf0c48a, fog: 0xe9b97c, near: 4, far: 78, tint: [1.12, 0.92, 0.72], hemi: 0.9, glow: 0xffb060, glowOp: 0.75, fire: 0.25, mariposas: 1 },
   { n: 'noche', bg: 0x06130e, fog: 0x08201a, near: 2, far: 40, tint: [0.34, 0.5, 0.56], hemi: 0.45, glow: 0x66ffd0, glowOp: 0.12, fire: 1, mariposas: 0 },
 ];
 
 // ---- escena base ----
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.xr.enabled = true;
-renderer.xr.setReferenceSpaceType('local-floor');
-document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(HORAS[0].bg);
 scene.fog = new THREE.Fog(HORAS[0].fog, HORAS[0].near, HORAS[0].far);
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 300);
 camera.position.set(0, 1.62, 0);
 const rig = new THREE.Group(); rig.name = 'Jugador'; rig.add(camera); scene.add(rig);
-rig.position.set(-0.3, 0.3, 0.8);
+rig.position.set(-0.3, ANT ? 0 : 0.3, ANT ? 1.1 : 0.8);
 const world = new THREE.Group(); world.name = 'Mundo'; scene.add(world);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x6a7a4a, 1.0); scene.add(hemi);
@@ -88,6 +90,14 @@ function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0) 
 }
 
 // ---- árboles y plantas por anillos de profundidad ----
+if (ANT) {
+  // árboles antiguos: troncos enormes con raíces abiertas y musgo lima, muy cerca (visto desde abajo)
+  const anc = [1, 2, 3, 4].map((k) => P.ancientCanvas(60 + k * 7));
+  const ring = (n, rMin, rMax, hMin, hMax, mul, seed) => anc.forEach((c, k) => cards(c, Math.ceil(n / 4), rMin, rMax, hMin, hMax, 0.8, mul, seed + k));
+  ring(9, 5.5, 9, 5, 7.5, 1.0, 100); ring(24, 9, 16, 7, 11, 0.98, 200); ring(50, 16, 28, 9, 14, 0.95, 300); ring(80, 28, 50, 11, 17, 0.92, 400);
+  [1, 2].forEach((k) => cards(P.fernCanvas(20 + k), 28, 2.6, 22, 0.7, 1.3, 1.0, 1.0, 500 + k));
+  cards(P.nalcaCanvas(31), 9, 4, 22, 1.0, 1.7, 1.0, 1.0, 601); cards(P.quilaCanvas(41), 8, 5, 24, 1.8, 3.0, 0.25, 0.95, 701);
+} else {
 const treeKinds = [['broad', 11], ['broad', 12], ['broad', 13], ['alerce', 14], ['alerce', 15], ['dead', 16]];
 const treeCanvases = treeKinds.map(([k, s]) => P.treeCanvas(k, s));
 function treeRing(n, rMin, rMax, hMin, hMax, mul, seed) {
@@ -100,10 +110,11 @@ treeRing(180, 36, 56, 11, 17, 0.9, 400);
 [1, 2, 3].forEach((i) => cards(P.fernCanvas(20 + i), 55, 2.6, 24, 0.8, 1.5, 1.0, 1.0, 500 + i));
 [1, 2].forEach((i) => cards(P.nalcaCanvas(30 + i), 20, 3.5, 24, 1.1, 1.9, 1.0, 1.0, 600 + i));
 [1, 2].forEach((i) => cards(P.quilaCanvas(40 + i), 22, 4.5, 26, 2.0, 3.4, 0.25, 0.95, 700 + i));
+}
 
 // ---- suelo, hojarasca y ramitas ----
 {
-  const gt = P.toTex(P.groundCanvas(), true); gt.repeat.set(26, 26);
+  const gt = P.toTex(P.groundCanvas(3, ANT), true); gt.repeat.set(26, 26);
   const g = new THREE.Mesh(new THREE.CircleGeometry(90, 56).rotateX(-Math.PI / 2), reg(new THREE.MeshBasicMaterial({ map: gt, fog: true }), 0.95));
   g.name = 'Suelo'; scene.add(g);
   const r = P.rng(77), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), pos = new THREE.Vector3();
@@ -124,6 +135,20 @@ treeRing(180, 36, 56, 11, 17, 0.9, 400);
   tw.frustumCulled = false; scene.add(tw);
 }
 
+if (ANT) {
+  // montículos de musgo lima y hongos
+  const r = P.rng(909), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+  const mound = new THREE.SphereGeometry(1, 14, 8, 0, 6.283, 0, Math.PI / 2);
+  const mounds = new THREE.InstancedMesh(mound, reg(new THREE.MeshLambertMaterial({ color: 0xffffff, fog: true }), 1), 90);
+  const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 6, 0, 6.283, 0, Math.PI / 2), reg(new THREE.MeshLambertMaterial({ color: 0xffffff, fog: true }), 1), 70);
+  const stems = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.45, 1, 7).translate(0, 0.5, 0), reg(new THREE.MeshLambertMaterial({ color: 0xf1e7c8, fog: true }), 1), 70);
+  const lime = ['#86c43c', '#9bd04a', '#6fae32', '#a8d85a'], capc = ['#efe3c4', '#d9693a', '#f4f0e0', '#c4562e'];
+  const free = () => { for (;;) { const a = r() * 6.283, rad = 2 + Math.sqrt(r()) * 28, x = Math.cos(a) * rad, z = Math.sin(a) * rad; if (!(Math.hypot(x - 1, z + 0.8) < 1.6 || (Math.abs(x) < 1.3 && z > -0.4 && z < 2.4))) return [x, z]; } };
+  for (let i = 0; i < 90; i++) { const [x, z] = free(), sz = 0.35 + r() * 1.3; q.setFromEuler(e.set(0, r() * 6.28, 0)); m.compose(pos.set(x, 0, z), q, sc.set(sz, sz * (0.28 + r() * 0.3), sz * (0.8 + r() * 0.4))); mounds.setMatrixAt(i, m); mounds.setColorAt(i, new THREE.Color(lime[(r() * 4) | 0])); }
+  for (let i = 0; i < 70; i++) { const [x, z] = free(), h = 0.08 + r() * 0.2, cr = h * (0.7 + r() * 0.5); q.identity(); m.compose(pos.set(x, 0, z), q, sc.set(cr * 0.5, h, cr * 0.5)); stems.setMatrixAt(i, m); m.compose(pos.set(x, h, z), q, sc.set(cr, cr * 0.55, cr)); caps.setMatrixAt(i, m); caps.setColorAt(i, new THREE.Color(capc[(r() * 4) | 0])); }
+  [mounds, caps, stems].forEach((o) => { o.frustumCulled = false; scene.add(o); });
+}
+
 // ---- plataforma de madera + taller ----
 function woodCanvas(seed, w = 512, h = 512, plank = 64) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'), r = P.rng(seed);
@@ -135,12 +160,13 @@ function woodCanvas(seed, w = 512, h = 512, plank = 64) {
 const woodTex = P.toTex(woodCanvas(5), true);
 const wood = (rx = 2, ry = 2) => { const t = woodTex.clone(); t.needsUpdate = true; t.repeat.set(rx, ry); return reg(new THREE.MeshLambertMaterial({ map: t, fog: true }), 1); };
 function box(w, h, d, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); world.add(m); return m; }
-const DECK_H = 0.3;
+const DECK_H = ANT ? 0 : 0.3;
+const TABLE = ANT ? { x: 1.0, z: -0.8, w: 1.2, d: 1.2, top: 0.86 } : { x: 0.95, z: -0.35, w: 1.6, d: 0.78, top: DECK_H + 0.82 };
+if (!ANT) {
 box(4.4, DECK_H, 4.4, wood(3, 3), 0, DECK_H / 2, 0).name = 'Plataforma';
 box(1.3, 0.2, 0.5, wood(1, 1), 0, 0.1, -2.45).name = 'Peldaño_1';
 box(1.3, 0.1, 0.5, wood(1, 1), 0, 0.05, -2.95).name = 'Peldaño_2';
 // mesa de taller (frente a la derecha)
-const TABLE = { x: 0.95, z: -0.35, w: 1.6, d: 0.78, top: DECK_H + 0.82 };
 box(TABLE.w, 0.06, TABLE.d, wood(2, 1), TABLE.x, TABLE.top - 0.03, TABLE.z).name = 'Mesa_tapa';
 [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => box(0.08, TABLE.top - DECK_H - 0.06, 0.08, wood(1, 1), TABLE.x + a * (TABLE.w / 2 - 0.08), DECK_H + (TABLE.top - DECK_H - 0.06) / 2, TABLE.z + b * (TABLE.d / 2 - 0.08)));
 box(TABLE.w - 0.2, 0.05, 0.4, wood(2, 1), TABLE.x, DECK_H + 0.3, TABLE.z - 0.1).name = 'Mesa_repisa';
@@ -166,6 +192,17 @@ box(TABLE.w - 0.2, 0.05, 0.4, wood(2, 1), TABLE.x, DECK_H + 0.3, TABLE.z - 0.1).
   board.position.set(TABLE.x, DECK_H + 1.9, TABLE.z - 1.13); world.add(board); board.name = 'Tablero_siluetas';
   [-0.75, 0.75].forEach((dx) => box(0.07, 1.1, 0.05, wood(1, 1), TABLE.x + dx, DECK_H + 1.9, TABLE.z - 1.12));
 }
+} else {
+  // tocón gigante como mesa de taller + hongos
+  const rc = document.createElement('canvas'); rc.width = rc.height = 256; const rx = rc.getContext('2d'); rx.fillStyle = '#c8a46a'; rx.fillRect(0, 0, 256, 256);
+  for (let k = 14; k > 0; k--) { rx.strokeStyle = `rgba(90,60,30,${0.25 + (k % 3) * 0.1})`; rx.lineWidth = 3; rx.beginPath(); rx.arc(128 + (k % 2), 128, k * 8.5, 0, 6.3); rx.stroke(); }
+  const topMat = reg(new THREE.MeshLambertMaterial({ map: P.toTex(rc), fog: true }), 1);
+  const side = reg(new THREE.MeshLambertMaterial({ color: 0x7c6a48, fog: true }), 1);
+  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.82, TABLE.top, 22), side); stump.position.set(TABLE.x, TABLE.top / 2, TABLE.z); stump.name = 'Tocon_mesa'; world.add(stump);
+  const topM = new THREE.Mesh(new THREE.CircleGeometry(0.64, 22).rotateX(-Math.PI / 2), topMat); topM.position.set(TABLE.x, TABLE.top + 0.002, TABLE.z); world.add(topM);
+  const mossT = reg(new THREE.MeshLambertMaterial({ color: 0x8fc24a, fog: true }), 1);
+  [[-0.5, 0.05, 0.3], [0.45, -0.3, 0.26], [0.2, 0.52, 0.22]].forEach(([dx, dz, rr]) => { const mm = new THREE.Mesh(new THREE.SphereGeometry(rr, 10, 6, 0, 6.283, 0, 1.5).scale(1, 0.4, 1), mossT); mm.position.set(TABLE.x + dx, TABLE.top - 0.04, TABLE.z + dz); world.add(mm); });
+}
 // farol de mesa
 const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.1), new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false })); lantern.position.set(TABLE.x - 0.62, TABLE.top + 0.08, TABLE.z - 0.22); world.add(lantern);
 const glowTex = P.toTex(P.glowCanvas());
@@ -175,13 +212,14 @@ const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color:
 sunGlow.scale.setScalar(70); sunGlow.position.set(0, 16, -70); scene.add(sunGlow);
 
 // ---- física: herramientas, tazas y palitos sobre la mesa ----
-const solids = [
+const solidsCasa = [
   { min: new THREE.Vector3(-2.2, 0, -2.2), max: new THREE.Vector3(2.2, DECK_H, 2.2) },
   { min: new THREE.Vector3(-0.65, 0, -2.7), max: new THREE.Vector3(0.65, 0.2, -2.2) },
   { min: new THREE.Vector3(-0.65, 0, -3.2), max: new THREE.Vector3(0.65, 0.1, -2.7) },
   { min: new THREE.Vector3(TABLE.x - TABLE.w / 2, TABLE.top - 0.09, TABLE.z - TABLE.d / 2), max: new THREE.Vector3(TABLE.x + TABLE.w / 2, TABLE.top, TABLE.z + TABLE.d / 2) },
   { min: new THREE.Vector3(TABLE.x - 0.55, 0, TABLE.z - 2.9), max: new THREE.Vector3(TABLE.x + 0.55, 9, TABLE.z - 1.15) },
 ];
+const solids = ANT ? [{ min: new THREE.Vector3(TABLE.x - 0.66, 0, TABLE.z - 0.66), max: new THREE.Vector3(TABLE.x + 0.66, TABLE.top, TABLE.z + 0.66) }] : solidsCasa;
 const audio = new HallAudio(camera);
 scene.add(audio.sfxRoot);
 const toys = createToys({ audio, parent: world, solids, onFloor: (x, z) => x * x + z * z < 95 * 95, defaults: false });
@@ -196,7 +234,7 @@ function makeScrewdriver() { const g = new THREE.Group(); part(g, new THREE.Cyli
 function makeMallet() { const g = new THREE.Group(); part(g, new THREE.CylinderGeometry(0.012, 0.012, 0.28, 8), kraft, 0, 0, 0, Math.PI / 2); part(g, new THREE.CylinderGeometry(0.045, 0.045, 0.12, 14), orange, 0, 0, 0.12, 0, 0, Math.PI / 2); return g; }
 function makeTwig(len) { const g = new THREE.Group(); part(g, new THREE.CylinderGeometry(0.008, 0.012, len, 6), new THREE.MeshStandardMaterial({ color: 0x6e5436, roughness: 1 }), 0, 0, 0, Math.PI / 2); return g; }
 const tp = TABLE.top;
-const put = (kind, obj, dx, dz, o) => { const b = toys.add(kind, obj, new THREE.Vector3(TABLE.x + dx, tp + (o.r || 0.05) + 0.002, TABLE.z + dz), o); obj.rotation.y = o.yaw || 0; b.obj.rotation.y = o.yaw || 0; return b; };
+const put = (kind, obj, dx, dz, o) => { const b = toys.add(kind, obj, new THREE.Vector3(TABLE.x + dx * (ANT ? 0.62 : 1), tp + (o.r || 0.05) + 0.002, TABLE.z + dz * (ANT ? 0.62 : 1)), o); obj.rotation.y = o.yaw || 0; b.obj.rotation.y = o.yaw || 0; return b; };
 put('martillo', makeHammer(), -0.35, 0.05, { r: 0.06, e: 0.2, yaw: 0.4 });
 put('alicate', makePliers(), -0.05, 0.12, { r: 0.05, e: 0.2, yaw: -0.5 });
 put('destornillador', makeScrewdriver(), 0.2, -0.05, { r: 0.04, e: 0.2, yaw: 0.9 });
@@ -210,7 +248,7 @@ for (let i = 0; i < 4; i++) put('palito', makeTwig(0.18 + i * 0.05), 0.1 + i * 0
 const flowerSpots = [];
 {
   const r = P.rng(55), vineMat = reg(billboard(new THREE.MeshBasicMaterial({ map: P.toTex(P.vineCanvas(8)), alphaTest: 0.45, side: THREE.DoubleSide, fog: true })), 1);
-  const n = 8, vines = new THREE.InstancedMesh(cardGeo, vineMat, n), m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3();
+  const n = ANT ? 5 : 8, vines = new THREE.InstancedMesh(cardGeo, vineMat, n), m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
     const a = r() * 6.283, rad = 2.3 + r() * 3.2, x = Math.cos(a) * rad, z = Math.sin(a) * rad, h = 1.8 + r() * 1.2;
     m.compose(pos.set(x, 3.3 - h, z), q, s.set(h * 0.25, h, 1)); vines.setMatrixAt(i, m);
@@ -336,11 +374,11 @@ function updateLook(dt) {
   rainMat.uniforms.uOn.value = look.rain; rain.visible = look.rain > 0.02;
   if (rainAmb) rainAmb.setVolume(0.55 * look.rain);
 }
-function setHora(i) { PARAM.hora = i % HORAS.length; $('btnHora').textContent = `Hora: ${HORAS[PARAM.hora].n}`; }
-function toggleRain() { PARAM.lluvia = !PARAM.lluvia; $('btnRain').textContent = PARAM.lluvia ? 'Parar lluvia' : 'Llover'; startAudio(); }
+function setHora(i) { PARAM.hora = i % HORAS.length; $(ID('hora')).textContent = `Hora: ${HORAS[PARAM.hora].n}`; }
+function toggleRain() { PARAM.lluvia = !PARAM.lluvia; $(ID('rain')).textContent = PARAM.lluvia ? 'Parar lluvia' : 'Llover'; startAudio(); }
 function setDensidad(v) { PARAM.densidad = v; layers.forEach((m) => { m.count = Math.floor(m.userData.full * v); }); }
-$('btnRain').onclick = toggleRain; $('btnHora').onclick = () => { setHora(PARAM.hora + 1); startAudio(); };
-$('dens').oninput = (e) => setDensidad(+e.target.value); $('niebla').oninput = (e) => { PARAM.niebla = +e.target.value; };
+$(ID('rain')).onclick = toggleRain; $(ID('hora')).onclick = () => { setHora(PARAM.hora + 1); startAudio(); };
+$(ID('dens')).oninput = (e) => setDensidad(+e.target.value); $(ID('niebla')).oninput = (e) => { PARAM.niebla = +e.target.value; };
 
 // ---- audio ----
 let audioOn = false;
@@ -357,11 +395,12 @@ function pickToy(rc) { const hit = rc.intersectObjects(toys.pickables(), false)[
 function rayFrom(c) { tmpM.identity().extractRotation(c.matrixWorld); raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld); raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tmpM); raycaster.far = 6; return raycaster; }
 const held = new Map();      // controlador -> juguete
 let drag = null;             // {c, prev: Vector3 (local al rig)}
-const controllers = [0, 1].map((i) => {
-  const c = renderer.xr.getController(i);
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1.2)]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 }));
-  c.add(line); c.userData.line = line;
+const controllers = app.controllers;
+const busy = () => !active || performance.now() < app.suppressUntil || app.menuOpen();
+controllers.forEach((c) => {
+  const line = c.userData.line;
   const start = () => {
+    if (busy()) return;
     startAudio();
     const it = pickToy(rayFrom(c));
     if (it) { toys.grab(it.b, c); held.set(c, it.b); line.visible = false; }
@@ -373,7 +412,6 @@ const controllers = [0, 1].map((i) => {
   };
   c.addEventListener('selectstart', start); c.addEventListener('selectend', end);
   c.addEventListener('squeezestart', start); c.addEventListener('squeezeend', end);
-  rig.add(c); return c;
 });
 const yawQ = new THREE.Quaternion(), fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), headW = new THREE.Vector3();
 let snapLatch = false; const btnLatch = {};
@@ -403,6 +441,7 @@ function locomotionXR(dt, cam) {
   }
 }
 function groundHeight(x, z) {
+  if (ANT) return 0;
   const onDeck = Math.abs(x) < 2.2 && Math.abs(z) < 2.2;
   const step1 = Math.abs(x) < 0.65 && z < -2.2 && z > -2.7, step2 = Math.abs(x) < 0.65 && z <= -2.7 && z > -3.2;
   return onDeck ? DECK_H : step1 ? 0.2 : step2 ? 0.1 : 0;
@@ -414,19 +453,21 @@ const mouseNdc = new THREE.Vector2(), mouseHand = new THREE.Object3D(); scene.ad
 const keys = new Set();
 function ndc(e) { const r = renderer.domElement.getBoundingClientRect(); mouseNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); raycaster.setFromCamera(mouseNdc, camera); raycaster.far = 8; }
 renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!active) return;
   startAudio(); if (renderer.xr.isPresenting) return; ndc(e);
   const it = pickToy(raycaster);
   if (it) { mouseItem = it.b; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.getWorldQuaternion(new THREE.Quaternion())); mouseHand.updateMatrixWorld(true); toys.grab(it.b, mouseHand); return; }
   dragLook = true; lx = e.clientX; ly = e.clientY;
 });
-addEventListener('pointerup', () => { dragLook = false; if (mouseItem) { toys.release(mouseItem); mouseItem = null; } });
+addEventListener('pointerup', () => { if (!active) return; dragLook = false; if (mouseItem) { toys.release(mouseItem); mouseItem = null; } });
 addEventListener('pointermove', (e) => {
-  if (renderer.xr.isPresenting) return; ndc(e);
+  if (!active || renderer.xr.isPresenting) return; ndc(e);
   if (!mouseItem) { mouseHover = pickToy(raycaster); renderer.domElement.style.cursor = mouseHover ? 'pointer' : dragLook ? 'grabbing' : 'grab'; }
   if (!dragLook) return;
   yaw -= (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY;
 });
 addEventListener('keydown', (e) => {
+  if (!active) return;
   startAudio(); keys.add(e.key.toLowerCase());
   if (e.key === 'l' || e.key === 'L') toggleRain(); if (e.key === 'h' || e.key === 'H') setHora(PARAM.hora + 1); if (e.key === 'r' || e.key === 'R') toys.resetAll();
 });
@@ -434,34 +475,15 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 let lastInput = performance.now(), idleBlend = 0;
 ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true }));
 addEventListener('pointermove', (e) => { if (e.buttons) lastInput = performance.now(); });
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
-// ---- sesión VR ----
-const btnVR = $('btnVR'); btnVR.innerHTML = vrButtonHTML;
-const menu = mountMenu({ current: 'bosque', onVR: () => btnVR.click() });
+// ---- sesión VR (la inicia app.js) ----
 let hudUntil = 0;
-btnVR.onclick = async () => {
-  try {
-    startAudio();
-    const session = await navigator.xr.requestSession('immersive-vr', { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor', 'hand-tracking'] });
-    session.addEventListener('end', () => { $('ui').classList.remove('hidden'); menu.hide(false); camera.position.set(0, 1.62, 0); });
-    await renderer.xr.setSession(session);
-    $('ui').classList.add('hidden'); menu.hide(true); camera.position.set(0, 0, 0); hudUntil = performance.now() + 40000;
-  } catch (e) { console.error(e); say('No se pudo iniciar VR: ' + (e.message || e)); }
-};
-(async () => {
-  if (!navigator.xr) { say('Sin WebXR: vista previa en PC.'); return; }
-  const vr = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
-  btnVR.disabled = !vr; say(vr ? 'Listo: VR disponible.' : 'Sin VR: vista previa en PC.');
-})();
-maybeSplash(() => btnVR.click(), () => !btnVR.disabled);
 const hud = makeHud(); hud.mesh.visible = false; scene.add(hud.mesh);
 
 // ---- bucle ----
-const clock = new THREE.Clock(); let fpsT = 0, fpsN = 0, fps = 0, hudT = 0;
-say('Listo.');
-renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
+let tAcc = 0, fpsT = 0, fpsN = 0, fps = 0, hudT = 0;
+function update(dt) {
+  tAcc += dt; const t = tAcc;
   const xrOn = renderer.xr.isPresenting, cam = xrOn ? renderer.xr.getCamera() : camera;
   fpsT += dt; fpsN++; if (fpsT > 0.5) { fps = Math.round(fpsN / fpsT); fpsT = 0; fpsN = 0; }
   if (!xrOn) {
@@ -495,9 +517,18 @@ renderer.setAnimationLoop(() => {
   { const pa = fires.geometry.attributes.position; for (let i = 0; i < fireN; i++) { pa.array[i * 3 + 1] += Math.sin(t * 0.7 + fireSeed[i]) * 0.0016; pa.array[i * 3] += Math.cos(t * 0.5 + fireSeed[i] * 2) * 0.0012; } pa.needsUpdate = true; }
   if (xrOn) {
     hud.mesh.visible = performance.now() < hudUntil;
-    hudT += dt; if (hudT > 0.5) { hudT = 0; hud.set(['BOSQUE DE PAPEL', `${fps} fps · ${HORAS[PARAM.hora].n}${PARAM.lluvia ? ' · lluvia' : ''}`, 'Joy izq: caminar · der: girar', 'Gatillo en el aire: arrastrar mundo', 'A: lluvia · B: hora'], '#9fe8b0'); }
+    hudT += dt; if (hudT > 0.5) { hudT = 0; hud.set([cfg.titulo.toUpperCase(), `${fps} fps · ${HORAS[PARAM.hora].n}${PARAM.lluvia ? ' · lluvia' : ''}`, 'Joy izq: caminar · der: girar', 'Gatillo en el aire: arrastrar mundo', 'A: lluvia · B: hora · clic joystick: escenas'], '#9fe8b0'); }
     hud.follow(cam, dt);
   }
-  renderer.render(scene, camera);
-});
+}
+function applyActive(on) {
+  active = on; panel.style.display = on ? '' : 'none'; audio.listener.setMasterVolume(on ? 1 : 0);
+  if (on) { controllers.forEach((c) => rig.add(c)); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); camera.position.set(0, renderer.xr.isPresenting ? 0 : 1.62, 0); if (renderer.xr.isPresenting) hudUntil = performance.now() + 25000; renderer.setClearColor(0x000000, 1); app.setInfo({ titulo: cfg.titulo, intro: cfg.intro || '', hint: cfg.hint || '' }); }
+}
 window.__bosque = { THREE, scene, camera, rig, toys, PARAM, LOCO, setHora, toggleRain, setDensidad, pica, look: (y, p) => { yaw = y; pitch = p; } };
+return {
+  id: cfg.id, scene, camera, update, hasAR: false,
+  enter: () => applyActive(true), exit: () => applyActive(false),
+  onXRStart: () => { camera.position.set(0, 0, 0); hudUntil = performance.now() + 25000; }, onXRStop: () => { camera.position.set(0, 1.62, 0); },
+};
+}

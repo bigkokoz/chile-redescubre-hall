@@ -22,6 +22,8 @@
     button.primary { background:var(--acc); color:#04120e; border-color:transparent; font-weight:650; }
     button.primary:hover:not(:disabled) { background:#6bf6d4; }
     #status { font-size:13px; min-height:1.4em; }
+    label { display:block; font-size:12px; color:var(--mut); margin-top:6px; }
+    input[type=range] { width:100%; }
     #themes { display:flex; gap:6px; flex-wrap:wrap; }
     #themes button { padding:6px 10px; font-size:13px; border-radius:999px; }
     #themes button.on { border-color:var(--acc); }
@@ -35,16 +37,16 @@
 </head>
 <body>
   <div id="ui">
-    <h1><small>Chile Re-Descubre · Taller de Interfaces UAI</small>Hall</h1>
+    <h1><small>Chile Re-Descubre · Taller de Interfaces UAI</small><span id="titulo">Hall</span></h1>
     <p id="intro">Una casa con terraza a la selva. Agarra un disco, mételo en la computadora y todo se transforma. También puedes lanzar tazas, pelotas y orbes. Elige otra escena abajo.</p>
     <div class="row">
       <button id="btnAR" class="xr ar" disabled></button>
       <button id="btnVR" class="xr vr" disabled></button>
     </div>
     <p id="status">Comprobando tu dispositivo…</p>
-    <div id="themes"></div>
+    <div id="extra"></div>
     <p class="hint" id="hint">Vista previa en PC: arrastra el fondo para mirar. Mantén el clic sobre un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo (clic corto en un disco = insertarlo). Teclas 1–4 = discos, 0 = volver a la casa, R = reponer objetos.</p>
   </div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/app.js"></script>
 </body>
 </html>

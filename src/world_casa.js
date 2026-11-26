@@ -1,29 +1,16 @@
 import * as THREE from 'three';
-import { THEMES, shared, ThemeState, makeSurfaceMaterial } from './theme.js';
+import { THEMES, shared as themeShared, ThemeState, makeSurfaceMaterial } from './theme.js';
 import { buildCasa } from './casa.js';
 import { createToys } from './juguetes.js';
 import { createBirds } from './pajaros.js';
 import { RoomScanner } from './room.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
-import { maybeInstallEmulator } from './emu.js';
-import { mountMenu, maybeSplash, vrButtonHTML, arButtonHTML } from './menu.js';
 
-const $ = (id) => document.getElementById(id);
-const statusEl = $('status');
-const say = (t) => { statusEl.textContent = t; };
-
-await maybeInstallEmulator();
+export async function createCasa(app) {
+const { renderer, $, say } = app;
 
 // ---------- Escena base ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.xr.enabled = true;
-renderer.xr.setReferenceSpaceType('local-floor');
-renderer.setClearColor(0x04050a, 1);
-document.body.appendChild(renderer.domElement);
-
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 1200);
 camera.position.set(0, 1.62, 0);
@@ -44,8 +31,6 @@ const toys = createToys({ casa, audio });
 const birds = createBirds(scene, audio);
 const mouseHand = new THREE.Object3D(); mouseHand.name = 'Mano::Mouse'; scene.add(mouseHand);
 
-const menu = mountMenu({ current: 'casa', onVR: () => $('btnVR').click(), onAR: () => $('btnAR').click() });
-
 // ---------- Modo: vista previa (PC) / vr / ar ----------
 let mode = 'preview';
 let stationPlaced = false, arT = 0;
@@ -56,13 +41,12 @@ function setMode(m) {
   scanner.group.visible = m === 'ar';
   renderer.setClearColor(0x04050a, m === 'ar' ? 0 : 1);
   if (m !== 'ar') { scanner.clear(); } else { stationPlaced = false; arT = 0; }
-  $('ui').classList.toggle('hidden', m !== 'preview');
-  menu.hide(m !== 'preview');
 }
-setMode('preview');
+let active = false;
+const panel = document.createElement('div'); panel.innerHTML = '<div id="themes"></div>'; panel.style.display = 'none'; app.extra.appendChild(panel);
+const themesEl = panel.firstElementChild;
 
 // ---------- Ambientes ----------
-const themesEl = $('themes');
 let prevTheme = 0;
 THEMES.forEach((t, i) => {
   const b = document.createElement('button');
@@ -106,15 +90,12 @@ function rayFromController(ctrl) {
   return raycaster;
 }
 const held = new Map();
-const controllers = [0, 1].map((i) => {
-  const c = renderer.xr.getController(i);
-  const line = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1.2)]),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 }),
-  );
-  line.name = 'Control::Rayo';
-  c.add(line);
+const controllers = app.controllers;
+const busy = () => !active || performance.now() < app.suppressUntil || app.menuOpen();
+controllers.forEach((c) => {
+  const line = c.userData.line;
   const start = () => {
+    if (busy()) return;
     audio.start(casa.slotAnchor, audioObjs);
     const it = pickItem(rayFromController(c));
     if (it) { grabItem(it, c); held.set(c, it); line.visible = false; }
@@ -126,8 +107,6 @@ const controllers = [0, 1].map((i) => {
   };
   c.addEventListener('selectstart', start); c.addEventListener('selectend', end);
   c.addEventListener('squeezestart', start); c.addEventListener('squeezeend', end);
-  scene.add(c);
-  return c;
 });
 raycaster.far = Infinity;
 
@@ -140,6 +119,7 @@ function setRayFromMouse(e) {
   raycaster.setFromCamera(mouseNdc, camera); raycaster.far = 50;
 }
 renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!active) return;
   audio.start(casa.slotAnchor, audioObjs);
   if (mode === 'preview') {
     setRayFromMouse(e);
@@ -149,10 +129,12 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   dragging = true; lx = e.clientX; ly = e.clientY;
 });
 addEventListener('pointerup', () => {
+  if (!active) return;
   dragging = false;
   if (mouseItem) { releaseItem(mouseItem); mouseItem = null; }
 });
 addEventListener('pointermove', (e) => {
+  if (!active) return;
   if (mode === 'preview') {
     setRayFromMouse(e);
     if (!mouseItem) { mouseHover = pickItem(raycaster); renderer.domElement.style.cursor = mouseHover ? 'pointer' : (dragging ? 'grabbing' : 'grab'); }
@@ -162,59 +144,19 @@ addEventListener('pointermove', (e) => {
   lx = e.clientX; ly = e.clientY;
 });
 addEventListener('keydown', (e) => {
+  if (!active) return;
   audio.start(casa.slotAnchor, audioObjs);
   const i = '1234'.indexOf(e.key);
   if (i >= 0) casa.insert(casa.discs[i]);
   if (e.key === '0') ejectHome();
   if (e.key === 'r' || e.key === 'R') toys.resetAll();
 });
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-// ---------- Sesiones XR ----------
-const btnAR = $('btnAR'), btnVR = $('btnVR');
-btnVR.innerHTML = vrButtonHTML; btnAR.innerHTML = arButtonHTML;
-let enabledFeatures = [];
-async function enter(kind) {
-  const xr = navigator.xr;
-  const init = kind === 'ar'
-    ? { requiredFeatures: ['local-floor'], optionalFeatures: ['plane-detection', 'mesh-detection', 'anchors', 'hit-test', 'hand-tracking'] }
-    : { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor', 'hand-tracking'] };
-  try {
-    audio.start(casa.slotAnchor, audioObjs);
-    const session = await xr.requestSession(kind === 'ar' ? 'immersive-ar' : 'immersive-vr', init);
-    enabledFeatures = session.enabledFeatures ? [...session.enabledFeatures] : [];
-    session.addEventListener('end', () => { setMode('preview'); say('Sesión terminada.'); });
-    await renderer.xr.setSession(session);
-    setMode(kind);
-  } catch (err) {
-    console.error(err);
-    say(`No se pudo iniciar ${kind.toUpperCase()}: ${err.message || err}`);
-  }
-}
-btnAR.onclick = () => enter('ar');
-btnVR.onclick = () => enter('vr');
-
-async function detect() {
-  if (!navigator.xr) { say('Este navegador no tiene WebXR. Estás en vista previa. Abre esta página en el Meta Quest.'); return; }
-  const [ar, vr] = await Promise.all([
-    navigator.xr.isSessionSupported('immersive-ar').catch(() => false),
-    navigator.xr.isSessionSupported('immersive-vr').catch(() => false),
-  ]);
-  btnAR.disabled = !ar; btnVR.disabled = !vr;
-  say(ar || vr ? `Listo: ${ar ? 'AR (passthrough)' : ''}${ar && vr ? ' y ' : ''}${vr ? 'VR' : ''} disponible.` : 'Tu navegador tiene WebXR pero ninguna sesión disponible. Vista previa.');
-}
-detect();
-maybeSplash((k) => enter(k), (k) => !(k === 'vr' ? btnVR : btnAR).disabled);
-
 // ---------- Recorrido automático: cuando nadie toca nada, la cámara pasea por la sala ----------
 const P3 = (a) => a.map((p) => new THREE.Vector3(...p));
 const TOUR_POS = new THREE.CatmullRomCurve3(P3([[0, 1.62, 0.2], [0.8, 1.55, -0.15], [2.4, 1.6, -0.3], [2.5, 1.7, -1.9], [0.3, 1.7, -1.9], [-2.3, 1.7, -1.5], [-2.4, 1.6, -0.3], [-1.5, 1.5, 1.0], [-0.3, 1.55, 0.8]]), true, 'centripetal');
 const TOUR_LOOK = new THREE.CatmullRomCurve3(P3([[0, 1.3, -1.4], [0.2, 1.0, -1.35], [0.3, 1.2, -1.5], [0.5, 1.6, -3.5], [0, 1.5, -30], [-1.0, 1.2, -1.0], [-1.0, 1.1, -1.2], [0.5, 0.8, 2.2], [0, 1.2, -1.4]]), true, 'centripetal');
 let lastInput = performance.now(), tourBlend = 0, tourT = 0;
-const poke = () => { lastInput = performance.now(); if (tourBlend > 0.15) { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); yaw = e.y; pitch = e.x; } };
+const poke = () => { if (!active) return; lastInput = performance.now(); if (tourBlend > 0.15) { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); yaw = e.y; pitch = e.x; } };
 ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) => addEventListener(ev, poke, { passive: true }));
 addEventListener('pointermove', (e) => { if (e.buttons) poke(); });
 const tM4 = new THREE.Matrix4(), tQa = new THREE.Quaternion(), tQb = new THREE.Quaternion(), tE = new THREE.Euler(), tPm = new THREE.Vector3(0, 1.62, 0), tP = new THREE.Vector3(), tL = new THREE.Vector3(), tUp = new THREE.Vector3(0, 1, 0);
@@ -232,9 +174,8 @@ function previewCamera(dt) {
 }
 
 // ---------- Bucle ----------
-const clock = new THREE.Clock();
 const tmpV = new THREE.Vector3();
-let hudT = 0, lastIdx = -1;
+let hudT = 0, lastIdx = -1, enabledFeatures = [];
 function placeStationAR(cam) {
   // 1) una mesa real detectada (Quest) 2) si no, 0.9 m delante a 0.75 m de altura
   let point = null;
@@ -250,10 +191,9 @@ function placeStationAR(cam) {
   casa.placeOnTable(point, yaw);
   return true;
 }
-renderer.setAnimationLoop((_, frame) => {
-  const dt = Math.min(clock.getDelta(), 0.1);
-  shared.uTime.value += dt;
-  const t = shared.uTime.value;
+function update(dt, frame) {
+  themeShared.uTime.value += dt;
+  const t = themeShared.uTime.value;
 
   if (mode === 'preview') previewCamera(dt);
   themeState.update(dt);
@@ -296,12 +236,24 @@ renderer.setAnimationLoop((_, frame) => {
       `HALL · ${mode === 'ar' ? 'Realidad mixta' : mode === 'vr' ? 'VR' : 'Vista previa'}`,
       `Ambiente: ${th.name}`,
       mode === 'ar' ? `Planos: ${scanner.stats.planes}${labels ? ` (${labels})` : ''}` : 'Agarra y lanza: discos, tazas, pelotas',
-      mode === 'ar' ? `Mallas: ${scanner.stats.meshes}` : '',
+      mode === 'ar' ? `Mallas: ${scanner.stats.meshes}` : 'Clic del joystick: escenas',
       enabledFeatures.length ? `Func: ${enabledFeatures.filter((f) => f !== 'local-floor').join(' ')}` : '',
     ].filter(Boolean), th.a);
   }
-  renderer.render(scene, camera);
-});
+}
+
+function applyActive(on, xrKind) {
+  active = on; panel.style.display = on ? '' : 'none';
+  audio.listener.setMasterVolume(on ? 1 : 0);
+  if (on) { controllers.forEach((c) => scene.add(c)); setMode(xrKind || 'preview'); enabledFeatures = app.features || []; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); app.setInfo({ titulo: 'Casa del hall', intro: 'Una casa con terraza a la selva. Agarra un disco, mételo en la computadora y todo se transforma. También puedes lanzar tazas, pelotas y orbes.', hint: 'Vista previa en PC: arrastra el fondo para mirar. Mantén el clic sobre un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo (clic corto en un disco = insertarlo). Teclas 1–4 = discos, 0 = volver a la casa, R = reponer objetos.' }); }
+}
 
 // Para depurar desde la consola
 window.__hall = { THREE, toys, birds, scene, camera, renderer, casa, themeState, scanner, chooseTheme, look: (y, p) => { yaw = y; pitch = p; } };
+
+return {
+  id: 'casa', scene, camera, update, hasAR: true,
+  enter: (xrKind) => applyActive(true, xrKind), exit: () => applyActive(false),
+  onXRStart: (k) => { setMode(k); enabledFeatures = app.features || []; }, onXRStop: () => setMode('preview'),
+};
+}

@@ -3,8 +3,9 @@
 // (el navegador exige un toque del usuario para iniciar VR, y ese toque se pierde al cambiar de página).
 
 export const ESCENAS = [
-  { id: 'casa', titulo: 'Casa del hall', ver: 'v0.3', desc: 'Discos que transforman la casa · tazas que se rompen · paisajes 360', href: './', thumb: 'thumbs/casa.jpg', ar: true },
-  { id: 'bosque', titulo: 'Bosque de papel', ver: 'v0.4', desc: 'Taller en el bosque valdiviano · camina, agarra, picaflor y lluvia', href: 'bosque.html', thumb: 'thumbs/bosque.jpg', ar: false },
+  { id: 'casa', titulo: 'Casa del hall', ver: 'v0.3', desc: 'Discos que transforman la casa · tazas que se rompen · paisajes 360', thumb: 'thumbs/casa.jpg', ar: true },
+  { id: 'bosque', titulo: 'Bosque de papel', ver: 'v0.4', desc: 'Taller en el bosque valdiviano · camina, agarra, picaflor y lluvia', thumb: 'thumbs/bosque.jpg', ar: false },
+  { id: 'antiguo', titulo: 'Bosque antiguo', ver: 'v0.6', desc: 'Troncos enormes con raíces y musgo lima · niebla verde · tocón de taller', thumb: 'thumbs/antiguo.jpg', ar: false },
 ];
 
 const ICON_VR = '<svg viewBox="0 0 48 28" width="34" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="40" height="19" rx="7"/><circle cx="16" cy="13.5" r="4.6"/><circle cx="32" cy="13.5" r="4.6"/><path d="M21 22.5l1.8-3h2.4l1.8 3"/></svg>';
@@ -24,8 +25,8 @@ const CSS = `
 #escenas .in h3 { margin:0 0 2px; font-size:15px; }
 #escenas .in p { margin:0 0 8px; color:#8b93a7; font-size:11.5px; min-height:30px; }
 #escenas .bt { display:flex; gap:7px; }
-#escenas .bt a, #escenas .bt button { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; text-decoration:none; color:#e9ecf3; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:10px; padding:7px 8px; cursor:pointer; font:600 13px system-ui,sans-serif; }
-#escenas .bt a:hover, #escenas .bt button:hover { background:rgba(255,255,255,.17); }
+#escenas .bt button { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; text-decoration:none; color:#e9ecf3; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:10px; padding:7px 8px; cursor:pointer; font:600 13px system-ui,sans-serif; }
+#escenas .bt button:hover { background:rgba(255,255,255,.17); }
 #escenas .bt .vr { background:#35f0c0; color:#04120e; border-color:transparent; letter-spacing:.07em; font-weight:800; }
 #escenas .bt .vr:hover { background:#6bf6d4; }
 #escenas .bt .vr b, #escenas .bt .ar b { font-weight:800; font-size:14px; }
@@ -34,25 +35,27 @@ const CSS = `
 #splash p { margin:0; color:#8b93a7; max-width:420px; }
 `;
 
-/** Dibuja la barra de escenas. `current` = id de la escena de esta página; `on.vr/ar` = acciones para ella. */
-export function mountMenu({ current, onVR, onAR, vrEnabled = () => true, arEnabled = () => true }) {
+/** Barra de escenas (escritorio). Todo ocurre en la misma página: elegir una escena no recarga ni cierra el VR. */
+export function mountMenu({ onSelect, onVR, onAR }) {
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
   const nav = document.createElement('nav'); nav.id = 'escenas'; nav.setAttribute('aria-label', 'Escenas del hall');
-  const base = (u) => new URL(u, location.href).href;
+  const cards = {};
   ESCENAS.forEach((e) => {
-    const here = e.id === current;
-    const card = document.createElement('div'); card.className = 'esc' + (here ? ' on' : '');
-    card.innerHTML = `<div class="th" style="background-image:url('${e.thumb}')"><i>${e.ver}</i>${here ? '<em>aquí</em>' : ''}</div>
+    const card = document.createElement('div'); card.className = 'esc';
+    card.innerHTML = `<div class="th" style="background-image:url('${e.thumb}')"><i>${e.ver}</i><em>aquí</em></div>
       <div class="in"><h3>${e.titulo}</h3><p>${e.desc}</p><div class="bt"></div></div>`;
     const bt = card.querySelector('.bt');
-    const mk = (cls, html, title) => { const el = document.createElement(here && cls !== 'ver' ? 'button' : 'a'); el.className = cls; el.innerHTML = html; el.title = title; return el; };
-    if (!here) { const v = mk('ver', 'Ver', `Abrir ${e.titulo}`); v.href = base(e.href); bt.appendChild(v); }
-    const vr = mk('vr', vrButtonHTML, 'Entrar en realidad virtual'); if (here) vr.onclick = () => onVR && onVR(); else vr.href = base(e.href) + (e.href.includes('?') ? '&' : '?') + 'vr=1'; bt.appendChild(vr);
-    if (e.ar) { const ar = mk('ar', arButtonHTML, 'Entrar en realidad mixta (passthrough)'); if (here) ar.onclick = () => onAR && onAR(); else ar.href = base(e.href) + '?ar=1'; bt.appendChild(ar); }
-    nav.appendChild(card);
+    const mk = (cls, html, title, fn) => { const el = document.createElement('button'); el.className = cls; el.innerHTML = html; el.title = title; el.onclick = fn; bt.appendChild(el); return el; };
+    mk('ver', 'Ver', `Abrir ${e.titulo}`, () => onSelect(e.id));
+    mk('vr', vrButtonHTML, 'Entrar en realidad virtual', () => onVR(e.id));
+    if (e.ar) mk('ar', arButtonHTML, 'Entrar en realidad mixta (passthrough)', () => onAR(e.id));
+    nav.appendChild(card); cards[e.id] = card;
   });
   document.body.appendChild(nav);
-  return { el: nav, hide: (h) => nav.classList.toggle('hidden', h) };
+  return {
+    el: nav, hide: (h) => nav.classList.toggle('hidden', h),
+    setCurrent: (id) => Object.entries(cards).forEach(([k, c]) => { c.classList.toggle('on', k === id); c.querySelector('.ver').style.display = k === id ? 'none' : ''; c.querySelector('em').style.display = k === id ? '' : 'none'; }),
+  };
 }
 
 /** Si la URL trae ?vr=1 (o ?ar=1), muestra "Toca para entrar" y llama a start(kind) con ese toque. */

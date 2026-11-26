@@ -153,10 +153,10 @@ export function leafCanvas() {
   return c;
 }
 
-export function groundCanvas(seed = 3) {
+export function groundCanvas(seed = 3, lime = false) {
   const w = 1024, h = 1024, c = mk(w, h), ctx = c.getContext('2d'), r = rng(seed);
-  ctx.fillStyle = '#6f8f4e'; ctx.fillRect(0, 0, w, h);
-  const blobs = [['#5c8442', 26], ['#7fa05a', 18], ['#8a7a4a', 10], ['#4e7a3c', 24], ['#9a8a58', 8]];
+  ctx.fillStyle = lime ? '#86b043' : '#6f8f4e'; ctx.fillRect(0, 0, w, h);
+  const blobs = lime ? [['#6fa032', 26], ['#9bc653', 22], ['#7a8a3a', 10], ['#5a8a2c', 24], ['#b3d46a', 14]] : [['#5c8442', 26], ['#7fa05a', 18], ['#8a7a4a', 10], ['#4e7a3c', 24], ['#9a8a58', 8]];
   for (let i = 0; i < 520; i++) { const b = blobs[(r() * blobs.length) | 0]; ctx.fillStyle = b[0]; ctx.globalAlpha = 0.35 + r() * 0.4; ctx.beginPath(); ctx.ellipse(r() * w, r() * h, 20 + r() * 70, 14 + r() * 40, r() * 3, 0, 6.3); ctx.fill(); }
   ctx.globalAlpha = 1;
   for (let i = 0; i < 9000; i++) { ctx.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.07)'; ctx.fillRect(r() * w, r() * h, 1 + r() * 3, 1 + r() * 2); }
@@ -167,5 +167,51 @@ export function glowCanvas() {
   const c = mk(64, 64), ctx = c.getContext('2d'), g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(255,255,255,0.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  return c;
+}
+
+// Árbol antiguo: tronco enorme y retorcido, raíces que se abren por el suelo, musgo lima y ramas con copas (como la referencia elegida)
+export function ancientCanvas(seed) {
+  const w = 640, h = 800, c = mk(w, h), ctx = c.getContext('2d'), r = rng(seed);
+  const BK = ['#8b7a52', '#7c6c46', '#9a8a5e'], DK = '#5b4c30', LM = ['#86c43c', '#9bd04a', '#6fae32', '#b0dc62'];
+  const cx = w / 2 + (r() - 0.5) * 30;
+  const hw = (y) => { const t = y / h; return w * (0.15 + 0.07 * Math.sin(t * 9 + seed) * 0.4 + 0.1 * t * t + 0.16 * Math.pow(Math.max(0, t - 0.78) / 0.22, 2)); };
+  const wob = (y, s) => Math.sin(y * 0.05 + s) * 7 + Math.sin(y * 0.021 + s * 2) * 12;
+  // raíces
+  const roots = [];
+  for (let i = 0; i < 8; i++) {
+    const side = i % 2 ? 1 : -1, x0 = cx + side * (20 + r() * 90), y0 = h * (0.74 + r() * 0.1), len = 160 + r() * 200, a = side * (0.5 + r() * 0.8), w0 = 54 + r() * 38;
+    roots.push({ x0, y0, x1: x0 + side * Math.cos(a) * len, y1: Math.min(h - 6, y0 + 70 + Math.abs(Math.sin(a)) * len * 0.6), cx: x0 + side * len * 0.35, cy: y0 + 10 + r() * 40, w0 });
+  }
+  const bez = (R, t) => [(1 - t) * (1 - t) * R.x0 + 2 * (1 - t) * t * R.cx + t * t * R.x1, (1 - t) * (1 - t) * R.y0 + 2 * (1 - t) * t * R.cy + t * t * R.y1];
+  const drawRoot = (R, pass) => { for (let i = 0; i < 28; i++) { const t = i / 28, [x, y] = bez(R, t), [x2, y2] = bez(R, (i + 1) / 28); ctx.lineCap = 'round'; ctx.lineWidth = Math.max(5, R.w0 * (1 - t * 0.92)) + (pass ? 0 : 7); ctx.strokeStyle = pass ? BK[(i + R.w0) % 3 | 0] : '#26301a'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke(); } };
+  roots.forEach((R) => drawRoot(R, 0));
+  // tronco
+  const trunk = () => { ctx.beginPath(); for (let y = 0; y <= h; y += 16) ctx.lineTo(cx - hw(y) + wob(y, 1), y); for (let y = h; y >= 0; y -= 16) ctx.lineTo(cx + hw(y) + wob(y, 4), y); ctx.closePath(); };
+  ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = '#26301a'; trunk(); ctx.stroke(); ctx.fillStyle = BK[0]; trunk(); ctx.fill();
+  roots.forEach((R) => drawRoot(R, 1));
+  // ramas retorcidas con copa
+  const leaves = [];
+  for (let b = 0; b < 3; b++) {
+    const side = b % 2 ? 1 : -1, y0 = h * (0.16 + b * 0.16), x0 = cx + side * hw(y0) * 0.9, len = 150 + r() * 130, ang = side * (0.9 + r() * 0.5);
+    const R = { x0, y0, x1: x0 + side * Math.cos(ang - 0.4) * len, y1: y0 - 30 - r() * 90, cx: x0 + side * len * 0.55, cy: y0 + 20 + r() * 50, w0: 46 - b * 8 };
+    drawRoot(R, 0); drawRoot(R, 1);
+    for (let k = 0; k < 9; k++) leaves.push([R.x1 + (r() - 0.5) * 120, R.y1 + (r() - 0.5) * 80, 14 + r() * 20, 9 + r() * 12, LM[(r() * 4) | 0]]);
+  }
+  for (const L of leaves) { ctx.fillStyle = '#26301a'; ctx.beginPath(); ctx.ellipse(L[0], L[1], L[2] + 4, L[3] + 4, r() * 3, 0, 6.3); ctx.fill(); }
+  for (const L of leaves) { ctx.fillStyle = L[4]; ctx.beginPath(); ctx.ellipse(L[0], L[1], L[2], L[3], r() * 3, 0, 6.3); ctx.fill(); }
+  // copa que tapa el borde superior del tronco
+  for (let k = 0; k < 90; k++) { const f = Math.pow(r(), 1.6); leaves.push([cx + (r() - 0.5) * w * 0.8, f * 150 + 4, 18 + r() * 30, 12 + r() * 18, LM[(r() * 4) | 0]]); }
+  for (const L of leaves.slice(-90)) { ctx.fillStyle = '#26301a'; ctx.beginPath(); ctx.ellipse(L[0], L[1], L[2] + 4, L[3] + 4, r() * 3, 0, 6.3); ctx.fill(); }
+  for (const L of leaves.slice(-90)) { ctx.fillStyle = L[4]; ctx.beginPath(); ctx.ellipse(L[0], L[1], L[2], L[3], r() * 3, 0, 6.3); ctx.fill(); }
+  // arrugas de la corteza y luz
+  ctx.save(); ctx.beginPath(); trunk(); ctx.clip();
+  for (let i = 0; i < 60; i++) { const x = cx + (r() - 0.5) * hw(h * 0.6) * 2, y = r() * h; ctx.strokeStyle = r() < 0.6 ? 'rgba(40,30,15,0.5)' : 'rgba(210,190,130,0.35)'; ctx.lineWidth = 2 + r() * 4; ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + (r() - 0.5) * 30, y + 50, x + (r() - 0.5) * 20, y + 90 + r() * 100); ctx.stroke(); }
+  ctx.restore();
+  // musgo lima: montoncitos de manchas pequeñas sobre raíces, base y repisas del tronco
+  const clump = (x, y, n, spread) => { for (let k = 0; k < n; k++) { const ox = (r() - 0.5) * spread, oy = (r() - 0.5) * spread * 0.5, sz = 5 + r() * 11; ctx.fillStyle = '#3f6b1a'; ctx.beginPath(); ctx.ellipse(x + ox, y + oy + 3, sz + 1, sz * 0.7 + 1, 0, 0, 6.3); ctx.fill(); ctx.fillStyle = LM[(r() * 4) | 0]; ctx.beginPath(); ctx.ellipse(x + ox, y + oy, sz, sz * 0.7, 0, 0, 6.3); ctx.fill(); } };
+  for (let i = 0; i < 46; i++) { const R = roots[(r() * roots.length) | 0], t = r() * 0.85, [x, y] = bez(R, t); clump(x, y - R.w0 * (1 - t) * 0.32, 5, 34); }
+  for (let i = 0; i < 12; i++) { const y = h * (0.5 + r() * 0.45); clump(cx + (r() - 0.5) * hw(y) * 1.7, y, 4, 36); }
+  grain(ctx, w, h, r, 4500);
   return c;
 }

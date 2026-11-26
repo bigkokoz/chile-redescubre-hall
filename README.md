@@ -3,7 +3,7 @@
 Hall de entrada WebXR para el concurso **Chile Re-Descubre** (Taller de Diseño de Interfaces, UAI, Unidad 3).
 Entras a una **casa futurista con terraza** abierta a una selva infinita (360°). Sobre el escritorio hay una computadora y un rack con **cuatro discos**: agarras uno, lo metes en la ranura y una **línea de luz** recorre la casa y el paisaje transformándolos en el ambiente del disco (Autopoiesis, Desierto, Mar, Bosque). En **realidad mixta (passthrough)** la estación de discos aparece en miniatura sobre tu mesa real y los planos detectados (piso, paredes, mesas) se visten con el ambiente.
 
-> Estado: v0.5 (menú de escenas + recorrido automático + botones VR/AR con logo). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
+> Estado: v0.6 (una sola página con 3 escenas, menú de escenas dentro del visor, Bosque antiguo). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
 
 ## Versiones guardadas (etiquetas de git)
 | Etiqueta | Qué es |
@@ -13,6 +13,7 @@ Entras a una **casa futurista con terraza** abierta a una selva infinita (360°)
 | `v0.3-fisica` | Física de juguetes: lanzar, tazas que se rompen, pelotas, orbes, pájaros |
 | `v0.4-bosque` | Mundo 2: bosque de papel recorrible |
 | `v0.5-menu` | Selector de escenas, recorrido automático de la cámara, botones VR/AR con logo |
+| `v0.6-escenas-vr` | Una sola página con 3 escenas (Casa, Bosque de papel, Bosque antiguo); menú 3D dentro del visor (clic del joystick) que cambia de escena sin cerrar el VR |
 
 Para volver a una versión: `git checkout v0.3-fisica` (y `npm run build`). El menú de escenas del sitio (`src/menu.js`) lista las escenas activas; agregar una escena = una página nueva + una entrada en `ESCENAS`.
 
@@ -28,7 +29,11 @@ Para volver a una versión: `git checkout v0.3-fisica` (y `npm run build`). El m
 - **Pájaros:** una bandada cruza la sala por el ventanal cada ~30 s y otras pasan lejos por el cielo; su color cambia con el ambiente.
 - Física propia y liviana (esferas contra cajas, 120 Hz) en `src/juguetes.js`; sonidos procedurales en `src/audio.js`; pájaros en `src/pajaros.js`. Tecla **R** repone los objetos.
 
-## Mundo 2: Bosque de papel (`bosque.html`)
+## Cambiar de escena
+- **PC:** barra de tarjetas abajo (Ver / VR / AR). **Dentro del visor:** clic del joystick abre un panel con las escenas; apuntas con el control y aprietas el gatillo. La sesión VR no se cierra al cambiar.
+- Arquitectura: `src/app.js` (visor y bucle únicos) + un módulo por escena (`world_casa.js`, `world_bosque.js` usado dos veces con distinta configuración). Una escena nueva = un módulo `create…(app)` + una entrada en `ESCENAS` (`src/menu.js`).
+
+## Mundo 2: Bosque de papel y Mundo 3: Bosque antiguo
 Escena recorrible en estilo **papel recortado en capas** (bosque valdiviano): árboles latifoliados, alerces, helechos, nalca, quila, copihues, hojarasca y ramitas, todo generado por código (`src/papel.js`, `src/bosque.js`). Un **taller** de madera sobre una plataforma con herramientas, tazas y palitos agarrables (misma física del hall), mariposas, un **picaflor chico** que visita los copihues y cruza frente a tu cara, hora del día (mañana, dorada, noche con luciérnagas) y **lluvia**.
 - **Quest:** joystick izquierdo camina, derecho gira por pasos, gatillo/grip en el aire arrastra el mundo, A = lluvia, B = hora. Además puedes caminar de verdad dentro de tu área.
 - **PC:** WASD + arrastrar para mirar, clic sostenido para agarrar y lanzar, L = lluvia, H = hora, R = reponer.
