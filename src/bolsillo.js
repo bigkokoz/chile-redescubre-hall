@@ -119,9 +119,10 @@ export function createPanel(app) {
       else {
         const n = c.horas.length, wcol = (RW - 16 * (n - 1)) / n;
         c.horas.forEach((nm, i) => els.push({ x: X + i * (wcol + 16), y: y0, w: wcol, h: rowH, type: 'btn', label: nm[0].toUpperCase() + nm.slice(1), active: c.hora() === i, onClick: () => c.setHora(i) }));
-        toggle(1, 'Lluvia', () => c.lluvia(), () => c.toggleRain());
-        stepper(2, 'Densidad de plantas', () => c.densidad(), (v) => `${Math.round(v * 100)}%`, () => c.setDensidad(Math.max(0.2, +(c.densidad() - 0.2).toFixed(2))), () => c.setDensidad(Math.min(1, +(c.densidad() + 0.2).toFixed(2))));
-        stepper(3, 'Niebla', () => c.niebla(), (v) => `×${v.toFixed(1)}`, () => c.setNiebla(Math.max(0.4, +(c.niebla() - 0.2).toFixed(1))), () => c.setNiebla(Math.min(2, +(c.niebla() + 0.2).toFixed(1))));
+        let rw = 1;
+        if (c.lluvia) toggle(rw++, 'Lluvia', () => c.lluvia(), () => c.toggleRain());
+        if (c.densidad && c.setDensidad && !c.sinDensidad) stepper(rw++, 'Densidad de plantas', () => c.densidad(), (v) => `${Math.round(v * 100)}%`, () => c.setDensidad(Math.max(0.2, +(c.densidad() - 0.2).toFixed(2))), () => c.setDensidad(Math.min(1, +(c.densidad() + 0.2).toFixed(2))));
+        stepper(rw++, 'Niebla', () => c.niebla(), (v) => `×${v.toFixed(1)}`, () => c.setNiebla(Math.max(0.4, +(c.niebla() - 0.2).toFixed(1))), () => c.setNiebla(Math.min(2, +(c.niebla() + 0.2).toFixed(1))));
       }
     } else if (page === 'clase') {
       const N = app.narr, st = N.state, stops = app.activeStops(), cur = app.stopIndex();
@@ -158,9 +159,9 @@ export function createPanel(app) {
       else if (e.type === 'lesson') {
         const st = app.narr.state, stops = app.activeStops(), cur = app.stopIndex(), s = cur >= 0 ? stops[cur] : null;
         ctx.fillStyle = '#101822'; rr(e.x, e.y, e.w, e.h, 18); ctx.fill();
-        ctx.fillStyle = '#35f0c0'; ctx.font = '800 40px system-ui, sans-serif'; ctx.fillText(s ? `${cur + 1}/${stops.length} · ${s.titulo}` : 'Clase recorrida de Monte Verde', e.x + 24, e.y + 52);
+        ctx.fillStyle = '#35f0c0'; ctx.font = '800 40px system-ui, sans-serif'; ctx.fillText(s ? `${cur + 1}/${stops.length} · ${s.titulo}` : 'Clase recorrida · Monte Verde', e.x + 24, e.y + 52);
         if (st.mode === 'answer') { ctx.fillStyle = '#ffd27a'; ctx.font = '600 28px system-ui, sans-serif'; ctx.fillText('Pregunta: ' + st.answerQ, e.x + 24, e.y + 92); }
-        else if (!app.narr.state.hasVoice) { ctx.fillStyle = '#6f7a90'; ctx.font = '24px system-ui, sans-serif'; ctx.fillText('(este visor no trae voz: la clase avanza sola para que puedas leer)', e.x + 24, e.y + 90); }
+        else { ctx.fillStyle = '#6f7a90'; ctx.font = '24px system-ui, sans-serif'; ctx.fillText(app.narr.state.files ? 'Voz: narradora chilena. Si no suena, lee el texto: avanza solo.' : app.narr.state.hasVoice ? 'Voz: la del visor. Si no suena, lee el texto: avanza solo.' : 'Modo lectura: este visor no trae voz, el texto avanza solo.', e.x + 24, e.y + 90); }
         if (!st.sentences.length) { ctx.fillStyle = '#9aa3b8'; ctx.font = '32px system-ui, sans-serif'; wrap('Toca una esfera luminosa del pueblo o aprieta «Comenzar la clase recorrida». El colihuacho te lleva a cada parada y te la explica.', e.w - 48).forEach((l, k) => ctx.fillText(l, e.x + 24, e.y + 150 + k * 42)); }
         else {
           const prev = st.sentences[st.idx - 1], cur2 = st.sentences[st.idx], next = st.sentences[st.idx + 1];

@@ -1,11 +1,18 @@
 // Narrador de la clase recorrida: lee el texto de cada parada frase por frase (voz del visor/navegador si existe)
 // y permite pausar, adelantar, retroceder y cambiar la velocidad. Si el visor no tiene voz, avanza solo con un reloj para poder leer.
 
-const splitSentences = (arr) => (Array.isArray(arr) ? arr : [arr]).flatMap((t) => t.split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡])/)).map((s) => s.trim()).filter(Boolean);
+export const splitSentences = (arr) => (Array.isArray(arr) ? arr : [arr]).flatMap((t) => t.split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡])/)).map((s) => s.trim()).filter(Boolean);
+
+/** Clave corta de una frase (FNV-1a): el mismo texto da el mismo archivo de voz en el navegador y en el generador. */
+export function hashText(t) { let h = 0x811c9dc5; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); }
 
 export function createNarrator(app) {
   const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
-  const st = { stop: null, mode: 'stop', sentences: [], idx: 0, playing: false, rate: 1, hasVoice: false, lastTitle: '', answerQ: '' };
+  const st = { stop: null, mode: 'stop', sentences: [], idx: 0, playing: false, rate: 1, hasVoice: false, files: false, lastTitle: '', answerQ: '' };
+  let cur = null, fileFails = 0;
+  const fileUrl = (text) => new URL(`narracion/${hashText(text)}.mp3`, document.baseURI).href;
+  // ¿hay narradora grabada? (carpeta narracion/ con manifest.json)
+  if (typeof fetch !== 'undefined') fetch(new URL('narracion/manifest.json', document.baseURI)).then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) { st.files = true; st.hasVoice = true; onChange(); } }).catch(() => {});
   let token = 0, timer = null, voice = null, onChange = () => {};
   function pickVoice() {
     if (!synth) return null;
@@ -14,19 +21,28 @@ export function createNarrator(app) {
     for (const p of pref) { const v = vs.find((x) => x.lang && x.lang.replace('_', '-').toLowerCase() === p.toLowerCase()); if (v) return v; }
     return vs.find((x) => x.lang && x.lang.toLowerCase().startsWith('es')) || null;
   }
-  const refreshVoice = () => { voice = pickVoice(); st.hasVoice = !!voice; };
+  const refreshVoice = () => { voice = pickVoice(); st.hasVoice = !!voice || st.files; };
   if (synth) { refreshVoice(); synth.onvoiceschanged = () => { refreshVoice(); onChange(); }; }
   const vol = () => Math.max(0, Math.min(1, (app.aud.narracion ?? 1) * (app.aud.master ?? 1)));
-  const clear = () => { token++; clearTimeout(timer); if (synth) try { synth.cancel(); } catch { /* ok */ } };
+  const clear = () => { token++; clearTimeout(timer); if (cur) { try { cur.onended = cur.onerror = null; cur.pause(); } catch { /* ok */ } cur = null; } if (synth) try { synth.cancel(); } catch { /* ok */ } };
   function speak() {
     clear(); const my = token; if (!st.playing) return;
     const text = st.sentences[st.idx]; if (text == null) { st.playing = false; onChange(); return; }
     const advance = () => { if (my !== token || !st.playing) return; if (st.idx < st.sentences.length - 1) { st.idx++; onChange(); speak(); } else { st.playing = false; onChange(); app.onNarrationEnd && app.onNarrationEnd(st); } };
+    const soft = () => {      // plan B: voz del visor, o lectura con reloj
     if (synth && voice && vol() > 0.01) {
       const u = new SpeechSynthesisUtterance(text); u.voice = voice; u.lang = voice.lang; u.rate = st.rate; u.volume = vol();
       u.onend = advance; u.onerror = () => { if (my === token && st.playing) timer = setTimeout(advance, 600); };
       try { synth.speak(u); } catch { timer = setTimeout(advance, 1500); }
     } else timer = setTimeout(advance, Math.max(2200, (text.length / 13) * 1000 / st.rate));   // sin voz o en silencio: avanza como lectura
+    };
+    if (st.files && fileFails < 3 && vol() > 0.01) {                  // plan A: narradora chilena grabada
+      const a = new Audio(fileUrl(text)); cur = a; a.volume = vol(); a.playbackRate = st.rate;
+      a.onended = () => { fileFails = 0; advance(); };
+      a.onerror = () => { fileFails++; if (my === token && st.playing) soft(); };
+      a.play().catch(() => { if (my === token && st.playing && cur === a) { fileFails++; soft(); } });
+      const nx = st.sentences[st.idx + 1]; if (nx) { const pre = new Audio(fileUrl(nx)); pre.preload = 'auto'; }
+    } else soft();
   }
   const api = {
     state: st,

@@ -2,6 +2,7 @@
 import { maybeInstallEmulator } from './emu.js';
 import { createCasa } from './world_casa.js';
 import { createBosque } from './world_bosque.js';
+import { createViaje } from './world_viaje.js';
 import { mountMenu, ESCENAS, vrButtonHTML, arButtonHTML } from './menu.js';
 import { createBody, createPanel } from './bolsillo.js';
 import { createCompanion } from './colihuacho.js';
@@ -81,11 +82,12 @@ const app = {
 const BOSQUE_HINT = 'PC: arrastra para mirar, WASD para caminar, mantén clic en un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo. L = lluvia, H = hora, R = reponer objetos. Quest: joystick izq camina, der gira, gatillo/grip en el aire arrastra el mundo, A = lluvia, B = hora.';
 const FACTORY = {
   casa: () => createCasa(app),
-  monteverde: () => createBosque(app, { id: 'monteverde', tipo: 'mv', titulo: 'Monte Verde · clase recorrida', intro: 'Recorre la villa del grupo que vivió aquí hace unos 14.800 años. Toca las esferas luminosas o agarra al colihuacho para abrir la clase: puedes pausar, adelantar, cambiar la velocidad y preguntar.', hint: 'Esferas luminosas = paradas. Colihuacho (la figura que te sigue) = clase y guía. PC: arrastra para mirar, WASD camina, M = panel, N = siguiente parada. Quest: joystick izq camina, der gira, gatillo = elegir.' }),
+  viaje: () => createViaje(app),
   bosque: () => createBosque(app, { id: 'bosque', titulo: 'Bosque de papel', intro: 'Un taller en medio del bosque valdiviano. Camina, agarra herramientas y tazas, mira las mariposas y espera al picaflor.', hint: BOSQUE_HINT }),
   antiguo: () => createBosque(app, { id: 'antiguo', tipo: 'antiguo', titulo: 'Bosque antiguo', intro: 'Troncos enormes con raíces y musgo bajo la niebla verde. Un tocón hace de mesa de taller.', hint: BOSQUE_HINT }),
 };
 const panels = [createPanel(app)], panel = panels[0];
+app.panelRedraw = () => panels.forEach((p) => p.redraw && p.redraw());
 const takePanel = () => { let p = panels.find((x) => !x.visible); if (!p && panels.length < 3) { p = createPanel(app); panels.push(p); p.setCurrent(active ? active.id : ''); } return p || panels[panels.length - 1]; };
 const body = createBody(controllers);
 const companion = createCompanion(app);
@@ -208,7 +210,8 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); Ob
 
 // ---- arranque ----
 const q = new URLSearchParams(location.search);
-const first = FACTORY[q.get('escena')] ? q.get('escena') : 'casa';
+const wanted = q.get('escena') === 'monteverde' ? 'viaje' : q.get('escena');
+const first = FACTORY[wanted] ? wanted : 'casa';
 await select(first);
 if (q.has('vr') || q.has('ar')) {
   const kind = q.has('vr') ? 'vr' : 'ar';

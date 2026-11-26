@@ -56,6 +56,8 @@ function makeSfx(ctx) {
     volver: mk(0.9, (t) => (S(660, t) * 0.5 + S(990, t) * 0.25) * Math.exp(-t * 5) * Math.min(1, t * 60) * 0.35),
     trino: mk(0.7, (t) => S(3300 + 600 * Math.sin(t * 9), t) * (0.5 + 0.5 * S(26, t)) * Math.exp(-Math.pow((t - 0.3) * 4.5, 2)) * 0.3),
     chucao: mk(1.1, (t) => { const n = (t0, f0, f1, d) => { const u = (t - t0) / d; if (u < 0 || u > 1) return 0; return S(f0 + (f1 - f0) * u, t) * Math.sin(Math.PI * u) * 0.35; }; return n(0.0, 2100, 1700, 0.26) + n(0.32, 1900, 1500, 0.24) + n(0.62, 2400, 1300, 0.4); }),
+    rio: (() => { let l = 0, l2 = 0; return mk(4.0, (t) => { const n = noise(); l += (n - l) * 0.16; l2 += (l - l2) * 0.5; return (l2 * 1.6 + n * 0.12) * (0.75 + 0.25 * S(0.5, t)); }); })(),
+    murmullo: (() => { let b1 = 0, b2 = 0, b3 = 0; return mk(6.0, (t) => { const n = noise(); b1 += (n - b1) * 0.09; b2 += (n - b2) * 0.22; b3 += (n - b3) * 0.38; const band = (b2 - b1) * 3.0 + (b3 - b2) * 1.6; const syl = Math.max(0, S(2.3, t) * 0.6 + S(3.7, t) * 0.5 + S(5.2, t) * 0.4) * (0.4 + 0.6 * Math.max(0, S(0.5, t))); return band * syl * 1.2; }); })(),
     hojas: (() => { let prev = 0; return mk(6.0, (t) => { const n = noise(); const y = (n - prev) * 0.5; prev = n; return y * (0.35 + 0.65 * Math.abs(S(1 / 6, t))) * 0.9; }); })(),
     grillos: mk(3.0, (t) => S(4300, t) * (S(18, t) > 0.15 ? 1 : 0) * (0.55 + 0.45 * S(1, t)) * 0.5),
     chirp: mk(0.3, (t) => S(3200 + 2200 * Math.sin(t * 28) , t) * Math.exp(-t * 9) * (0.5 + 0.5 * Math.sin(t * 90)) * 0.28 * Math.min(1, t * 200)),
