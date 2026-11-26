@@ -42,7 +42,10 @@ export function createInput() {
 
 /** Interfaz táctil: se activa en pantallas táctiles (o con ?touch). Devuelve controles para que app.js enlace acciones. */
 export function mountTouchUI({ input, onPanel, onNext, hasStops, onMenu }) {
-  const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 1 || new URLSearchParams(location.search).has('touch');
+  // Solo teléfonos/tabletas. El navegador del Quest también reporta "pantalla táctil" y escondía el botón VR: por eso se excluye por nombre.
+  const ua = navigator.userAgent || '', headset = /OculusBrowser|Quest|Pico|Wolvic|VR/i.test(ua);
+  const phone = /iPhone|iPad|iPod|Android|Mobile/i.test(ua) && !headset;
+  const isTouch = !headset && (phone || new URLSearchParams(location.search).has('touch'));
   if (!isTouch) return null;
   input.touch = true; document.body.classList.add('touch');
   const css = document.createElement('style');
