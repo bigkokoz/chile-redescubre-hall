@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 // Ambientes del hall. Más adelante cada uno se enlaza a un hito.
 export const THEMES = [
-  { id: 'lab',      name: 'Laboratorio', mode: 0, a: '#35f0c0', b: '#8b7cff', particles: { speed: 0.25, sway: 1.0, size: 22 } },
+  { id: 'casa',     name: 'Casa',        mode: 0, a: '#ffb35c', b: '#ffe2b0', particles: { speed: 0.12, sway: 1.0, size: 18 } },
+  { id: 'lab',      name: 'Autopoiesis', mode: 0, a: '#35f0c0', b: '#8b7cff', particles: { speed: 0.25, sway: 1.0, size: 22 } },
   { id: 'desierto', name: 'Desierto',    mode: 1, a: '#ff8a2b', b: '#ffd98a', particles: { speed: 0.10, sway: 3.0, size: 14 } },
   { id: 'mar',      name: 'Mar',         mode: 2, a: '#1f8fff', b: '#6ff3ff', particles: { speed: 0.55, sway: 1.4, size: 26 } },
   { id: 'bosque',   name: 'Bosque',      mode: 3, a: '#3fd16b', b: '#d6ff70', particles: { speed: 0.18, sway: 2.2, size: 20 } },
