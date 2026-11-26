@@ -32,6 +32,25 @@ function makeChimeBuffer(ctx, f) {
   return buf;
 }
 
+// Efectos procedurales (golpes, vidrio/cerámica, rebote, pop, pío)
+function makeSfx(ctx) {
+  const sr = ctx.sampleRate;
+  const mk = (dur, fn) => {
+    const b = ctx.createBuffer(1, Math.floor(sr * dur), sr); const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = fn(i / sr, i);
+    return b;
+  };
+  const S = (f, t) => Math.sin(2 * Math.PI * f * t);
+  const noise = () => Math.random() * 2 - 1;
+  return {
+    crash: mk(1.0, (t) => (noise() * Math.exp(-t * 9) * 0.55 + (S(1830, t) + 0.8 * S(2760, t) + 0.6 * S(4130, t) + 0.5 * S(5320, t)) * Math.exp(-t * 16) * 0.14 + S(140, t) * Math.exp(-t * 25) * 0.4) * Math.min(1, t * 400)),
+    clink: mk(0.3, (t) => (S(3180, t) * 0.22 + S(4710, t) * 0.14) * Math.exp(-t * 30) + S(170, t) * Math.exp(-t * 35) * 0.5 + noise() * Math.exp(-t * 80) * 0.2),
+    bounce: mk(0.22, (t) => S(300 - 800 * t, t) * Math.exp(-t * 22) * 0.7),
+    pop: mk(0.22, (t) => S(480 + 1800 * t, t) * Math.exp(-t * 14) * 0.45),
+    chirp: mk(0.3, (t) => S(3200 + 2200 * Math.sin(t * 28) , t) * Math.exp(-t * 9) * (0.5 + 0.5 * Math.sin(t * 90)) * 0.28 * Math.min(1, t * 200)),
+  };
+}
+
 export class HallAudio {
   constructor(camera) {
     this.listener = new THREE.AudioListener();
@@ -39,6 +58,16 @@ export class HallAudio {
     this.started = false;
     this.pad = null;
     this.chimes = [];
+    this.sfxRoot = new THREE.Group(); this.sfxRoot.name = 'Audio::SFX';
+    this.pool = []; this.poolI = 0; this.bufs = null;
+  }
+  /** Reproduce un efecto en una posición de mundo (si el audio ya arrancó). */
+  sfx(kind, worldPos, vol = 1) {
+    if (!this.started || !this.bufs || !this.bufs[kind]) return;
+    const a = this.pool[this.poolI++ % this.pool.length];
+    if (a.isPlaying) a.stop();
+    a.parent.position.copy(worldPos);
+    a.setBuffer(this.bufs[kind]); a.setVolume(vol); a.play();
   }
   /** Llamar dentro de un gesto del usuario (clic / entrar a XR). */
   async start(coreObject, portalObjects) {
@@ -46,6 +75,11 @@ export class HallAudio {
     this.started = true;
     const ctx = THREE.AudioContext.getContext();
     try { await ctx.resume(); } catch { /* ignore */ }
+    this.bufs = makeSfx(ctx);
+    for (let i = 0; i < 10; i++) {
+      const h = new THREE.Object3D(); this.sfxRoot.add(h);
+      const a = new THREE.PositionalAudio(this.listener); a.setRefDistance(1.2); a.setRolloffFactor(1.1); h.add(a); this.pool.push(a);
+    }
     this.pad = new THREE.PositionalAudio(this.listener);
     this.pad.setBuffer(makePadBuffer(ctx));
     this.pad.setLoop(true);

@@ -199,7 +199,7 @@ export async function buildCasa(scene, progress = () => {}) {
     inserted: -1,
     onInserted: () => {},
     slotWorld,
-    discMeshes: () => discs.flatMap((d) => (d.state === 'rack' || d.state === 'flyHome' ? d.meshes : [])),
+    discMeshes: () => discs.flatMap((d) => (d.state === 'rack' || d.state === 'flyHome' || d.state === 'free' ? d.meshes : [])),
     discOf: (mesh) => discs[mesh.userData.discIndex],
 
     /** Mantiene el disco en la mano / rayo */
@@ -209,11 +209,18 @@ export async function buildCasa(scene, progress = () => {}) {
       d.heldAt = performance.now();
     },
     /** Soltó el disco: si está cerca de la ranura (o fue un toque corto) se inserta; si no, vuelve al rack */
-    release(d) {
+    release(d, vel) {
       const quick = performance.now() - (d.heldAt || 0) < 380;
       const near = d.holder.getWorldPosition(tmpV).distanceTo(slotWorld()) < 0.55;
       estacion.attach(d.holder);
-      if (quick || near) api.insert(d); else api.sendHome(d);
+      if (quick || near) api.insert(d); else api.toss(d, vel);
+    },
+    /** Lo lanzaste: cae con física (juguetes.js); al tocar el piso vuelve solo al rack */
+    toss(d, vel) {
+      d.state = 'free'; d.anim = null;
+      d.vel = vel ? vel.clone() : new THREE.Vector3();
+      d.ang = new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
+      d.freeT = 0; d.floorT = 0;
     },
     sendHome(d) {
       estacion.attach(d.holder);

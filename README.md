@@ -3,12 +3,19 @@
 Hall de entrada WebXR para el concurso **Chile Re-Descubre** (Taller de Diseño de Interfaces, UAI, Unidad 3).
 Entras a una **casa futurista con terraza** abierta a una selva infinita (360°). Sobre el escritorio hay una computadora y un rack con **cuatro discos**: agarras uno, lo metes en la ranura y una **línea de luz** recorre la casa y el paisaje transformándolos en el ambiente del disco (Autopoiesis, Desierto, Mar, Bosque). En **realidad mixta (passthrough)** la estación de discos aparece en miniatura sobre tu mesa real y los planos detectados (piso, paredes, mesas) se visten con el ambiente.
 
-> Estado: v0.2. Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
+> Estado: v0.3 (física de juguetes + pájaros). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
 
 ## Cómo se usa
 - **Meta Quest 3 / Quest 2:** abrir la URL en el Quest Browser → *Entrar en VR* (la casa) o *Entrar en AR (passthrough)* (estación sobre tu mesa). Con el control (gatillo o grip) o pellizcando: apuntar un disco, agarrarlo y soltarlo cerca de la ranura de la computadora (un toque rápido también lo inserta).
 - **PC (vista previa):** arrastrar para mirar, clic en un disco para insertarlo. Teclas **1–4** = discos, **0** = volver a la casa.
 - **PC con visor simulado:** `?emu` en la URL activa un Quest 3 emulado con una habitación sintética (planos y malla).
+
+## Objetos que se agarran y se lanzan (v0.3)
+- **Discos:** agárralos y suéltalos cerca de la ranura para insertarlos. Si los lanzas, rebotan con la casa y, al tocar el piso, vuelven solos al rack.
+- **Tazas de café:** se rompen si chocan fuerte (piso, paredes, mesas): salen trozos de cerámica y gotas de café, y reaparecen sobre el escritorio.
+- **Pelotas:** rebotan. **Orbes de luz:** flotan y cambian de color con el ambiente.
+- **Pájaros:** una bandada cruza la sala por el ventanal cada ~30 s y otras pasan lejos por el cielo; su color cambia con el ambiente.
+- Física propia y liviana (esferas contra cajas, 120 Hz) en `src/juguetes.js`; sonidos procedurales en `src/audio.js`; pájaros en `src/pajaros.js`. Tecla **R** repone los objetos.
 
 ## Cómo se hizo
 1. **Blender 5.3** (modelado procedural por script, conectado con MCP): casa, mobiliario, escritorio curvo, computadores, discos y jungla de ~3.600 árboles.

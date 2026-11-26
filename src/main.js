@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { THEMES, shared, ThemeState, makeSurfaceMaterial } from './theme.js';
 import { buildCasa } from './casa.js';
+import { createToys } from './juguetes.js';
+import { createBirds } from './pajaros.js';
 import { RoomScanner } from './room.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
@@ -35,7 +37,11 @@ scanner.group.visible = false;
 const hud = makeHud();
 scene.add(hud.mesh);
 const audio = new HallAudio(camera);
+scene.add(audio.sfxRoot);
 const audioObjs = [casa.slotAnchor, ...casa.discs.map((d) => d.holder)];
+const toys = createToys({ casa, audio });
+const birds = createBirds(scene, audio);
+const mouseHand = new THREE.Object3D(); mouseHand.name = 'Mano::Mouse'; scene.add(mouseHand);
 
 // ---------- Modo: vista previa (PC) / vr / ar ----------
 let mode = 'preview';
@@ -43,6 +49,7 @@ let stationPlaced = false, arT = 0;
 function setMode(m) {
   mode = m;
   casa.setMode(m);
+  birds.setVisible(m !== 'ar');
   scanner.group.visible = m === 'ar';
   renderer.setClearColor(0x04050a, m === 'ar' ? 0 : 1);
   if (m !== 'ar') { scanner.clear(); } else { stationPlaced = false; arT = 0; }
@@ -76,9 +83,16 @@ markTheme();
 // ---------- Interacción: rayo del control/mano o del mouse ----------
 const raycaster = new THREE.Raycaster();
 const tmpM = new THREE.Matrix4();
-function pickDisc(rc) {
-  const hit = rc.intersectObjects(casa.discMeshes(), false)[0];
-  return hit ? casa.discOf(hit.object) : null;
+function pickItem(rc) {
+  const hit = rc.intersectObjects([...casa.discMeshes(), ...toys.pickables()], false)[0];
+  if (!hit) return null;
+  const toy = hit.object.userData.toy;
+  return toy ? { kind: 'toy', ref: toy, dist: hit.distance } : { kind: 'disc', ref: casa.discOf(hit.object), dist: hit.distance };
+}
+function grabItem(it, hand) { if (it.kind === 'disc') { casa.grab(it.ref, hand); toys.track(it.ref.holder); } else toys.grab(it.ref, hand); }
+function releaseItem(it) {
+  if (it.kind === 'disc') casa.release(it.ref, toys.untrack(it.ref.holder));
+  else toys.release(it.ref);
 }
 function rayFromController(ctrl) {
   tmpM.identity().extractRotation(ctrl.matrixWorld);
@@ -98,12 +112,12 @@ const controllers = [0, 1].map((i) => {
   c.add(line);
   const start = () => {
     audio.start(casa.slotAnchor, audioObjs);
-    const d = pickDisc(rayFromController(c));
-    if (d) { casa.grab(d, c); held.set(c, d); line.visible = false; }
+    const it = pickItem(rayFromController(c));
+    if (it) { grabItem(it, c); held.set(c, it); line.visible = false; }
   };
   const end = () => {
-    const d = held.get(c);
-    if (d) { casa.release(d); held.delete(c); }
+    const it = held.get(c);
+    if (it) { releaseItem(it); held.delete(c); }
     line.visible = true;
   };
   c.addEventListener('selectstart', start); c.addEventListener('selectend', end);
@@ -113,27 +127,33 @@ const controllers = [0, 1].map((i) => {
 });
 raycaster.far = Infinity;
 
-// Mouse en vista previa: arrastrar = mirar, clic en un disco = insertarlo
-let yaw = 0, pitch = -0.12, dragging = false, moved = 0, lx = 0, ly = 0;
-const mouseNdc = new THREE.Vector2(); let mouseHover = null;
+// Mouse en vista previa: arrastrar el fondo = mirar; mantener sobre un objeto = agarrarlo y lanzarlo
+let yaw = 0, pitch = -0.12, dragging = false, lx = 0, ly = 0;
+const mouseNdc = new THREE.Vector2(); let mouseHover = null, mouseItem = null, mouseDist = 1;
 function setRayFromMouse(e) {
   const r = renderer.domElement.getBoundingClientRect();
   mouseNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(mouseNdc, camera); raycaster.far = 50;
 }
-renderer.domElement.addEventListener('pointerdown', (e) => { dragging = true; moved = 0; lx = e.clientX; ly = e.clientY; audio.start(casa.slotAnchor, audioObjs); });
-addEventListener('pointerup', (e) => {
-  if (!dragging) return; dragging = false;
-  if (moved < 5 && mode === 'preview') {
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  audio.start(casa.slotAnchor, audioObjs);
+  if (mode === 'preview') {
     setRayFromMouse(e);
-    const d = pickDisc(raycaster);
-    if (d) casa.insert(d);
+    const it = pickItem(raycaster);
+    if (it) { mouseItem = it; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.quaternion); mouseHand.updateMatrixWorld(true); grabItem(it, mouseHand); return; }
   }
+  dragging = true; lx = e.clientX; ly = e.clientY;
+});
+addEventListener('pointerup', () => {
+  dragging = false;
+  if (mouseItem) { releaseItem(mouseItem); mouseItem = null; }
 });
 addEventListener('pointermove', (e) => {
-  if (mode === 'preview') { setRayFromMouse(e); mouseHover = pickDisc(raycaster); renderer.domElement.style.cursor = mouseHover ? 'pointer' : (dragging ? 'grabbing' : 'grab'); }
+  if (mode === 'preview') {
+    setRayFromMouse(e);
+    if (!mouseItem) { mouseHover = pickItem(raycaster); renderer.domElement.style.cursor = mouseHover ? 'pointer' : (dragging ? 'grabbing' : 'grab'); }
+  }
   if (!dragging || mode !== 'preview') return;
-  moved += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly);
   yaw -= (e.clientX - lx) * 0.004; pitch = Math.max(-1.2, Math.min(1.2, pitch - (e.clientY - ly) * 0.004));
   lx = e.clientX; ly = e.clientY;
 });
@@ -142,6 +162,7 @@ addEventListener('keydown', (e) => {
   const i = '1234'.indexOf(e.key);
   if (i >= 0) casa.insert(casa.discs[i]);
   if (e.key === '0') ejectHome();
+  if (e.key === 'r' || e.key === 'R') toys.resetAll();
 });
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -215,8 +236,15 @@ renderer.setAnimationLoop((_, frame) => {
 
   // Disco bajo el rayo (resaltado)
   const hover = new Set();
-  if (xrOn) controllers.forEach((c) => { if (!held.has(c)) { const d = pickDisc(rayFromController(c)); if (d) hover.add(d.i); } });
-  else if (mode === 'preview' && mouseHover) hover.add(mouseHover.i);
+  toys.hoverSet.clear();
+  const markHover = (it) => { if (!it) return; if (it.kind === 'disc') hover.add(it.ref.i); else toys.hoverSet.add(it.ref); };
+  if (xrOn) controllers.forEach((c) => { if (!held.has(c)) markHover(pickItem(rayFromController(c))); });
+  else if (mode === 'preview' && !mouseItem) markHover(mouseHover);
+  if (mouseItem) {
+    raycaster.setFromCamera(mouseNdc, camera);
+    mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist);
+    mouseHand.quaternion.copy(camera.quaternion); mouseHand.updateMatrixWorld(true);
+  }
 
   if (frame && mode === 'ar') {
     scanner.update(frame, renderer.xr.getReferenceSpace());
@@ -226,6 +254,8 @@ renderer.setAnimationLoop((_, frame) => {
   scanner.meshMat.color.copy(themeState.colA);
 
   casa.update(dt, t, themeState, cam.getWorldPosition(tmpV), hover);
+  toys.update(dt, themeState);
+  birds.update(dt, themeState.index, cam.getWorldPosition(tmpV));
   hud.mesh.visible = xrOn;
   hud.follow(cam, dt);
 
@@ -237,7 +267,7 @@ renderer.setAnimationLoop((_, frame) => {
     hud.set([
       `HALL · ${mode === 'ar' ? 'Realidad mixta' : mode === 'vr' ? 'VR' : 'Vista previa'}`,
       `Ambiente: ${th.name}`,
-      mode === 'ar' ? `Planos: ${scanner.stats.planes}${labels ? ` (${labels})` : ''}` : 'Agarra un disco y mételo en la ranura',
+      mode === 'ar' ? `Planos: ${scanner.stats.planes}${labels ? ` (${labels})` : ''}` : 'Agarra y lanza: discos, tazas, pelotas',
       mode === 'ar' ? `Mallas: ${scanner.stats.meshes}` : '',
       enabledFeatures.length ? `Func: ${enabledFeatures.filter((f) => f !== 'local-floor').join(' ')}` : '',
     ].filter(Boolean), th.a);
@@ -246,4 +276,4 @@ renderer.setAnimationLoop((_, frame) => {
 });
 
 // Para depurar desde la consola
-window.__hall = { THREE, scene, camera, renderer, casa, themeState, scanner, chooseTheme, look: (y, p) => { yaw = y; pitch = p; } };
+window.__hall = { THREE, toys, birds, scene, camera, renderer, casa, themeState, scanner, chooseTheme, look: (y, p) => { yaw = y; pitch = p; } };
