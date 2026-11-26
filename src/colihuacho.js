@@ -37,10 +37,14 @@ export function createCompanion(app) {
     },
     release() {
       if (S.mode !== 'held') return;
+      const wp = g.getWorldPosition(new THREE.Vector3());
+      if (app.onCompanionDrop && app.onCompanionDrop(wp)) { S.sceneRef.attach(g); S.holder = null; stopHum(); return; }
       const v = new THREE.Vector3(); if (S.hist.length > 1) { const a = S.hist[0], z = S.hist[S.hist.length - 1], sp = z.t - a.t; if (sp > 0.02) v.copy(z.p).sub(a.p).multiplyScalar(0.9 / sp); }
       S.sceneRef.attach(g); S.vel.copy(v).clampLength(0, 5); S.mode = 'free'; S.freeT = 0; S.holder = null; stopHum();
       app.onCompanionRelease && app.onCompanionRelease();
     },
+    /** Se mete en una ranura del cuerpo (HALL / SALIR) y luego vuelve a tu hombro. */
+    insertAt(pos, cb) { S.mode = 'insert'; S.ins = { p: pos.clone(), t: 0, cb }; try { S.audio && S.audio.started && S.audio.sfx('pop', pos, 0.6); } catch { /* sin audio */ } },
     /** Lo manda a esperar sobre un punto (guía de la clase). */
     lead(p) { S.lead = p.clone(); if (S.mode === 'perch' || S.mode === 'free') S.mode = 'lead'; },
     unlead() { S.lead = null; if (S.mode === 'lead') { S.mode = 'free'; S.freeT = 0.7; } },
@@ -56,6 +60,9 @@ export function createCompanion(app) {
       } else if (S.mode === 'lead' && S.lead) {
         tmp.copy(S.lead); tmp.y += Math.sin(t * 1.3) * 0.06; const d = tmp.distanceTo(g.position), far = camPos.distanceTo(tmp) > 14;
         if (!far) g.position.addScaledVector(tmp.sub(g.position), Math.min(1, dt * 1.6 * Math.min(1.5, 0.35 + d * 0.25)));
+      } else if (S.mode === 'insert' && S.ins) {
+        S.ins.t += dt; g.position.lerp(S.ins.p, 1 - Math.exp(-12 * dt)); g.scale.setScalar(Math.max(0.15, 1 - S.ins.t * 1.6));
+        if (S.ins.t > 0.55) { const cb = S.ins.cb; S.ins = null; g.scale.setScalar(1); S.mode = 'free'; S.freeT = 0.9; cb && cb(); }
       } else if (S.mode === 'held') {
         const p = g.getWorldPosition(new THREE.Vector3()); S.hist.push({ t: performance.now() / 1000, p }); while (S.hist.length > 2 && performance.now() / 1000 - S.hist[0].t > 0.12) S.hist.shift();
         if (S.hum) S.hum.setVolume(0.45 * (app.aud.efectos ?? 1) * (app.aud.master ?? 1) * (0.85 + 0.15 * Math.sin(t * 2)));

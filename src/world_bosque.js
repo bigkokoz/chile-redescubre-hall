@@ -25,7 +25,7 @@ app.extra.appendChild(panel);
 let active = false;
 
 // ---- parámetros que se pueden tocar ----
-const PARAM = { densidad: 1, niebla: 1, hora: 0, lluvia: false };
+const PARAM = { densidad: 1, niebla: 1, hora: cfg.tipo === 'mv' ? 1 : 0, lluvia: false };
 const LOCO = {
   velocidad: 2.2,          // m/s con el joystick
   giroGrados: 30,          // giro por pasos
@@ -52,8 +52,8 @@ const HORAS = MV ? HORAS_MV : ANT ? [
 
 // ---- escena base ----
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(HORAS[0].bg);
-scene.fog = new THREE.Fog(HORAS[0].fog, HORAS[0].near, HORAS[0].far);
+scene.background = new THREE.Color(HORAS[MV ? 1 : 0].bg);
+scene.fog = new THREE.Fog(HORAS[MV ? 1 : 0].fog, HORAS[MV ? 1 : 0].near, HORAS[MV ? 1 : 0].far);
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 300);
 camera.position.set(0, 1.62, 0);
 const rig = new THREE.Group(); rig.name = 'Jugador'; rig.add(camera); scene.add(rig);
@@ -81,9 +81,10 @@ function billboard(mat) {
   return mat;
 }
 const avoid = MV ? (x, z) => Math.abs(x) < 18 && z > -20 && z < 10 : (x, z) => Math.abs(x) < 3.3 && z > -4.2 && z < 3.3;
+const avoidV = (x, z) => Math.abs(x) < 15 && z > -14 && z < 7;   // solo el corazón de la villa
 const cardGeo = new THREE.PlaneGeometry(1, 1); cardGeo.translate(0, 0.5, 0);
 const layers = [];
-function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0) {
+function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0, av = avoid) {
   const mat = reg(billboard(new THREE.MeshBasicMaterial({ map: P.toTex(canvas), alphaTest: 0.45, side: THREE.DoubleSide, fog: true })), mul);
   const mesh = new THREE.InstancedMesh(cardGeo, mat, count);
   const r = P.rng(seed), m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3();
@@ -92,7 +93,7 @@ function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0) 
     for (let k = 0; k < 8; k++) {
       const a = r() * 6.283, rad = rMin + Math.sqrt(r()) * (rMax - rMin);
       x = Math.cos(a) * rad; z = Math.sin(a) * rad;
-      if (!avoid(x, z)) break;      // no encima de la plataforma
+      if (!av(x, z)) break;      // no encima de la plataforma
     }
     const h = hMin + r() * (hMax - hMin);
     m.compose(pos.set(x, y, z), q, s.set(h * aspect, h, 1)); mesh.setMatrixAt(i, m);
@@ -106,9 +107,9 @@ if (MV) {
   // bosque de Monte Verde: coihues y alerces más dispersos, helechos y quila; deja libre la villa
   const tc = [['broad', 11], ['broad', 12], ['alerce', 14], ['alerce', 15], ['dead', 16]].map(([k, sd]) => P.treeCanvas(k, sd));
   const ring = (n, rMin, rMax, hMin, hMax, mul, seed) => tc.forEach((c, i) => cards(c, Math.ceil(n / 5), rMin, rMax, hMin, hMax, 0.5, mul, seed + i));
-  ring(40, 14, 28, 5, 8, 1.0, 100); ring(80, 28, 44, 7, 11, 0.97, 200); ring(110, 44, 64, 9, 14, 0.94, 300);
-  [1, 2, 3].forEach((i) => cards(P.fernCanvas(20 + i), 22, 9, 30, 0.8, 1.5, 1.0, 1.0, 500 + i));
-  cards(P.nalcaCanvas(31), 8, 9, 30, 1.1, 1.9, 1.0, 1.0, 601); [1, 2].forEach((i) => cards(P.quilaCanvas(40 + i), 8, 9, 30, 2.0, 3.4, 0.25, 0.95, 700 + i));
+  ring(60, 14, 28, 5, 8, 1.0, 100); ring(110, 28, 44, 7, 11, 0.97, 200); ring(140, 44, 64, 9, 14, 0.94, 300);
+  [1, 2, 3].forEach((i) => cards(P.fernCanvas(20 + i), 34, 3, 28, 0.8, 1.6, 1.0, 1.0, 500 + i, 0, avoidV));
+  [1, 2].forEach((i) => cards(P.nalcaCanvas(30 + i), 12, 4, 28, 1.1, 1.9, 1.0, 1.0, 600 + i, 0, avoidV)); [1, 2].forEach((i) => cards(P.quilaCanvas(40 + i), 12, 5, 30, 2.0, 3.4, 0.25, 0.95, 700 + i, 0, avoidV));
 } else if (ANT) {
   // árboles antiguos: troncos enormes con raíces abiertas y musgo lima, muy cerca (visto desde abajo)
   const anc = [1, 2, 3, 4].map((k) => P.ancientCanvas(60 + k * 7));
@@ -134,7 +135,7 @@ treeRing(180, 36, 56, 11, 17, 0.9, 400);
 await tick();
 // ---- suelo, hojarasca y ramitas ----
 {
-  const gt = P.toTex(P.groundCanvas(3, MV ? 'turba' : ANT), true); gt.repeat.set(26, 26);
+  const gt = P.toTex(P.groundCanvas(3, ANT), true); gt.repeat.set(26, 26);
   const g = new THREE.Mesh(new THREE.CircleGeometry(90, 56).rotateX(-Math.PI / 2), reg(new THREE.MeshBasicMaterial({ map: gt, fog: true }), 0.95));
   g.name = 'Suelo'; scene.add(g);
   const r = P.rng(77), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), pos = new THREE.Vector3();
@@ -401,7 +402,7 @@ const rain = new THREE.LineSegments(rainGeo, rainMat); rain.frustumCulled = fals
 let rainAmb = null, windAmb = null, grillos = null, chirpT = 5;
 
 // ---- estado de "hora" y clima (se mezclan suavemente) ----
-const look = { bg: new THREE.Color(HORAS[0].bg), fog: new THREE.Color(HORAS[0].fog), near: HORAS[0].near, far: HORAS[0].far, tint: new THREE.Color(1, 1, 1), hemi: 1, glow: new THREE.Color(0xffffff), glowOp: 0.25, fire: 0, mari: 1, rain: 0 };
+const look = { bg: new THREE.Color(HORAS[MV ? 1 : 0].bg), fog: new THREE.Color(HORAS[MV ? 1 : 0].fog), near: HORAS[MV ? 1 : 0].near, far: HORAS[MV ? 1 : 0].far, tint: new THREE.Color(1, 1, 1), hemi: 1, glow: new THREE.Color(0xffffff), glowOp: 0.25, fire: 0, mari: 1, rain: 0 };
 const tgtC = new THREE.Color(), tgtT = new THREE.Color();
 function updateLook(dt) {
   const H = HORAS[PARAM.hora], k = Math.min(1, dt * 1.6), wet = PARAM.lluvia ? 1 : 0;
@@ -504,7 +505,7 @@ function groundHeight(x, z) {
 }
 
 // Escritorio: mouse + teclado
-let yaw = 0, pitch = -0.1, dragLook = false, lx = 0, ly = 0, mouseItem = null, mouseDist = 1, mouseHover = null;
+let lookId = -1, yaw = 0, pitch = -0.1, dragLook = false, lx = 0, ly = 0, mouseItem = null, mouseDist = 1, mouseHover = null;
 const mouseNdc = new THREE.Vector2(), mouseHand = new THREE.Object3D(); scene.add(mouseHand);
 const keys = new Set();
 function ndc(e) { const r = renderer.domElement.getBoundingClientRect(); mouseNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); raycaster.setFromCamera(mouseNdc, camera); raycaster.far = 8; }
@@ -514,13 +515,13 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   if (village) { const si = village.pickStop(raycaster); if (si >= 0) { mv.play(si); return; } }
   const it = pickToy(raycaster);
   if (it) { mouseItem = it.b; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.getWorldQuaternion(new THREE.Quaternion())); mouseHand.updateMatrixWorld(true); toys.grab(it.b, mouseHand); return; }
-  dragLook = true; lx = e.clientX; ly = e.clientY;
+  dragLook = true; lx = e.clientX; ly = e.clientY; lookId = e.pointerId;
 });
 addEventListener('pointerup', () => { if (!active) return; dragLook = false; if (mouseItem) { toys.release(mouseItem); mouseItem = null; } });
 addEventListener('pointermove', (e) => {
   if (!active || renderer.xr.isPresenting) return; ndc(e);
   if (!mouseItem) { mouseHover = pickToy(raycaster); renderer.domElement.style.cursor = mouseHover ? 'pointer' : dragLook ? 'grabbing' : 'grab'; }
-  if (!dragLook) return;
+  if (!dragLook || e.pointerId !== lookId) return;
   yaw -= (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY;
 });
 addEventListener('keydown', (e) => {
@@ -545,7 +546,8 @@ function update(dt) {
   fpsT += dt; fpsN++; if (fpsT > 0.5) { fps = Math.round(fpsN / fpsT); fpsT = 0; fpsN = 0; }
   if (!xrOn) {
     const idle = performance.now() - lastInput > 4000; idleBlend += ((idle ? 1 : 0) - idleBlend) * Math.min(1, dt * (idle ? 0.6 : 4));
-    camera.rotation.set(pitch + idleBlend * 0.08 * Math.sin(t * 0.13), yaw + idleBlend * 0.9 * Math.sin(t * 0.09), 0, 'YXZ');
+    app.input.look(camera, pitch + idleBlend * 0.08 * Math.sin(t * 0.13), yaw + idleBlend * 0.9 * Math.sin(t * 0.09));
+    { const jm = app.input.move; if (jm.x || jm.y) { lastInput = performance.now(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x); rig.position.addScaledVector(fwd, jm.y * app.loco.speed * dt).addScaledVector(rgt, jm.x * app.loco.speed * dt); } if (app.input.gyro.on) lastInput = performance.now(); }
     camera.position.set(idleBlend * 0.35 * Math.sin(t * 0.11), 1.62, idleBlend * 0.25 * Math.sin(t * 0.07));
     const sp = (keys.has('shift') ? 2 : 1) * app.loco.speed * dt;
     fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); rgt.set(-fwd.z, 0, fwd.x);

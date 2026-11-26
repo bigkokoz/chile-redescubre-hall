@@ -24,6 +24,12 @@ export function createBody(controllers) {
   [-1, 1].forEach((s) => { solid(new THREE.OctahedronGeometry(0.09, 0), teal, ln, s * 0.09, -0.7, 0, 1, 3.4, 1); solid(new THREE.TetrahedronGeometry(0.075, 0), amber, ln, s * 0.1, -1.06, 0.03, 1, 1, 1.4); });
   const ringMat = [0, 1].map(() => new THREE.MeshBasicMaterial({ color: 0x35f0c0, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide }));
   const rings = [-1, 1].map((s, i) => { const m = new THREE.Mesh(new THREE.RingGeometry(0.065, 0.095, 28).rotateY(Math.PI / 2), ringMat[i]); m.position.set(s * 0.17, -0.17, 0.04); group.add(m); return m; });
+  // ranuras del pecho: metes al colihuacho y sales al Hall o sales del VR (como el disco en la ranura)
+  const slotDefs = [{ id: 'hall', label: 'HALL', x: -0.1, color: 0x8a7bff }, { id: 'salir', label: 'SALIR', x: 0.1, color: 0xff8a6a }];
+  const slotRing = slotDefs.map((d) => { const m = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.05, 24), new THREE.MeshBasicMaterial({ color: d.color, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false })); m.position.set(d.x, 0.12, -0.17); m.rotation.y = Math.PI; group.add(m); return m; });
+  const slotLabel = slotDefs.map((d) => { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 56; const x = cv.getContext('2d'); x.font = '700 38px system-ui, sans-serif'; x.textAlign = 'center'; x.fillStyle = '#' + d.color.toString(16).padStart(6, '0'); x.fillText(d.label, 80, 42); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, depthTest: false, toneMapped: false })); s.scale.set(0.11, 0.04, 1); s.position.set(d.x, 0.19, -0.17); group.add(s); return s; });
+  const slotW = [new THREE.Vector3(), new THREE.Vector3()];
+  let slotHi = -1;
   // manos visibles en los controles (poliedros claros)
   const handMat = new THREE.MeshStandardMaterial({ color: 0xf3e6d0, emissive: 0x33261a, flatShading: true, roughness: 0.5 });
   controllers.forEach((c) => {
@@ -49,12 +55,18 @@ export function createBody(controllers) {
       mats.forEach(({ m, op }) => { m.opacity = op * state.fade; });
       group.children.forEach((c) => { if (c.isMesh && c.material.transparent && !ringMat.includes(c.material)) c.visible = state.fade > 0.01; if (c.isLineSegments) c.visible = state.fade > 0.01; });
       [-1, 1].forEach((s, i) => pockets[i].set(group.position.x + rgtX * s * 0.19 + fwdX * 0.04, group.position.y - 0.17, group.position.z + rgtZ * s * 0.19 + fwdZ * 0.04));
+      group.updateMatrixWorld(true);
+      slotDefs.forEach((d, i) => slotW[i].set(d.x, 0.12, -0.17).applyMatrix4(group.matrixWorld));
+      slotRing.forEach((m, i) => { m.material.opacity = (slotHi === i ? 0.95 : 0.12 + 0.45 * state.fade); m.scale.setScalar(slotHi === i ? 1.5 + Math.sin(performance.now() * 0.01) * 0.1 : 1); slotLabel[i].material.opacity = state.fade * (slotHi === i ? 1 : 0.8); });
       const near = [false, false];
       controllers.forEach((c) => { c.getWorldPosition(tmpP); for (let i = 0; i < 2; i++) if (tmpP.distanceTo(pockets[i]) < 0.26) near[i] = true; });
       const tt = performance.now() * 0.004;
       rings.forEach((m, i) => { ringMat[i].opacity = near[i] ? 0.95 : 0.12 + 0.2 * state.fade; m.scale.setScalar(near[i] ? 1.25 + Math.sin(tt) * 0.08 : 1); });
     },
     nearPocket(p, r = 0.26) { return pockets.findIndex((q) => q.distanceTo(p) < r); },
+    slotAt(p, r = 0.2) { return slotW.findIndex((q) => q.distanceTo(p) < r); },
+    slotPos(i) { return slotW[i].clone(); },
+    highlight(i) { slotHi = i; },
   };
 }
 

@@ -111,7 +111,9 @@ controllers.forEach((c) => {
 raycaster.far = Infinity;
 
 // Mouse en vista previa: arrastrar el fondo = mirar; mantener sobre un objeto = agarrarlo y lanzarlo
-let yaw = 0, pitch = -0.12, dragging = false, lx = 0, ly = 0;
+let yaw = 0, pitch = -0.12, dragging = false, lx = 0, ly = 0, lookId = -1;
+const walk = new THREE.Vector3(), keysDown = new Set(), wf = new THREE.Vector3(), wr = new THREE.Vector3();
+addEventListener('keydown', (e) => { if (active) keysDown.add(e.key.toLowerCase()); }); addEventListener('keyup', (e) => keysDown.delete(e.key.toLowerCase()));
 const mouseNdc = new THREE.Vector2(); let mouseHover = null, mouseItem = null, mouseDist = 1;
 function setRayFromMouse(e) {
   const r = renderer.domElement.getBoundingClientRect();
@@ -126,7 +128,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
     const it = pickItem(raycaster);
     if (it) { mouseItem = it; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.quaternion); mouseHand.updateMatrixWorld(true); grabItem(it, mouseHand); return; }
   }
-  dragging = true; lx = e.clientX; ly = e.clientY;
+  dragging = true; lx = e.clientX; ly = e.clientY; lookId = e.pointerId;
 });
 addEventListener('pointerup', () => {
   if (!active) return;
@@ -139,7 +141,7 @@ addEventListener('pointermove', (e) => {
     setRayFromMouse(e);
     if (!mouseItem) { mouseHover = pickItem(raycaster); renderer.domElement.style.cursor = mouseHover ? 'pointer' : (dragging ? 'grabbing' : 'grab'); }
   }
-  if (!dragging || mode !== 'preview') return;
+  if (!dragging || mode !== 'preview' || e.pointerId !== lookId) return;
   yaw -= (e.clientX - lx) * 0.004; pitch = Math.max(-1.2, Math.min(1.2, pitch - (e.clientY - ly) * 0.004));
   lx = e.clientX; ly = e.clientY;
 });
@@ -161,9 +163,20 @@ const poke = () => { if (!active) return; lastInput = performance.now(); if (tou
 addEventListener('pointermove', (e) => { if (e.buttons) poke(); });
 const tM4 = new THREE.Matrix4(), tQa = new THREE.Quaternion(), tQb = new THREE.Quaternion(), tE = new THREE.Euler(), tPm = new THREE.Vector3(0, 1.62, 0), tP = new THREE.Vector3(), tL = new THREE.Vector3(), tUp = new THREE.Vector3(0, 1, 0);
 function previewCamera(dt) {
+  // caminar por la sala (WASD / flechas / joystick del celular); el escritorio y las pantallas son obstáculos
+  const ip = app.input; let mx = ip.move.x, my = ip.move.y;
+  if (keysDown.has('w') || keysDown.has('arrowup')) my += 1; if (keysDown.has('s') || keysDown.has('arrowdown')) my -= 1; if (keysDown.has('d') || keysDown.has('arrowright')) mx += 1; if (keysDown.has('a') || keysDown.has('arrowleft')) mx -= 1;
+  if (mx || my) {
+    lastInput = performance.now(); const sp = 2.0 * dt * (keysDown.has('shift') ? 1.8 : 1); camera.getWorldDirection(wf); wf.y = 0; wf.normalize(); wr.set(-wf.z, 0, wf.x);
+    walk.addScaledVector(wf, Math.max(-1, Math.min(1, my)) * sp).addScaledVector(wr, Math.max(-1, Math.min(1, mx)) * sp);
+    walk.x = Math.max(-3.0, Math.min(3.0, walk.x)); walk.z = Math.max(-2.3, Math.min(2.6, walk.z));
+    if (Math.abs(walk.x) < 2.05 && walk.z < -0.62 && walk.z > -1.85) walk.z = walk.z > -1.2 ? -0.62 : -1.85;
+  }
+  if (ip.gyro.on) lastInput = performance.now();
+  tPm.set(walk.x, 1.62, walk.z);
   const idle = performance.now() - lastInput > 3500;
   tourBlend += ((idle ? 1 : 0) - tourBlend) * Math.min(1, dt * (idle ? 0.8 : 4));
-  if (tourBlend < 0.002) { camera.position.copy(tPm); camera.rotation.set(pitch, yaw, 0, 'YXZ'); return; }
+  if (tourBlend < 0.002) { camera.position.copy(tPm); app.input.look(camera, pitch, yaw); return; }
   tourT += dt * Math.min(1, tourBlend * 1.2);
   const u = (tourT / 95) % 1;
   TOUR_POS.getPoint(u, tP); TOUR_LOOK.getPoint(u, tL);

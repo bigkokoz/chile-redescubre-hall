@@ -6,6 +6,7 @@ import { mountMenu, ESCENAS, vrButtonHTML, arButtonHTML } from './menu.js';
 import { createBody, createPanel } from './bolsillo.js';
 import { createCompanion } from './colihuacho.js';
 import { createNarrator } from './narrador.js';
+import { createInput, mountTouchUI } from './touch.js';
 
 // ============================================================================
 // Hall: una sola página, un solo visor, varias escenas. Cambiar de escena NO cierra la sesión VR.
@@ -50,8 +51,9 @@ const AUD_PRESETS = {
 };
 let active = null, xrKind = null;
 const guide = { target: -1 };
+const input = createInput();
 const app = {
-  renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco, aud, saveAud, guide,
+  renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco, aud, saveAud, guide, input,
   setAudPreset: (n) => { Object.assign(aud, AUD_PRESETS[n]); saveAud(); },
   activeStops: () => (active && active.stops) || null,
   stopIndex: () => (active && active.mv ? active.mv.cur : -1),
@@ -64,6 +66,12 @@ const app = {
   onCompanionGrab: () => { const p = panels.find((x) => x.visible) || panel; p.showFront(active.scene, renderer.xr.isPresenting ? renderer.xr.getCamera() : active.camera); p.setPage(active.stops ? 'clase' : 'escenas'); },
   onCompanionRelease: () => { panels.forEach((p) => { if (p.mode === 'docked') p.release(); }); },
   onNarrationEnd: () => { panel.redraw(); },
+  // meter al colihuacho en una ranura del pecho: HALL = vuelve a la casa del hall; SALIR = termina la sesión VR (ves tu entorno)
+  onCompanionDrop: (p) => {
+    body.highlight(-1); const i = body.slotAt(p); if (i < 0) return false;
+    companion.insertAt(body.slotPos(i), () => { if (i === 0) select('casa'); else { const ss = renderer.xr.getSession(); if (ss) ss.end(); } });
+    return true;
+  },
   menuOpen: () => panels.some((p) => p.blocking),
   selectScene: (id) => select(id),
   activeControls: () => (active && active.controls) || null,
@@ -103,6 +111,7 @@ async function select(id) {
   active = w; w.enter(xrKind); w.scene.add(body.group); companion.attach(w.scene); companion.setAudio(w.audio || null);
   menu.setCurrent(id); panels.forEach((p) => p.setCurrent(id));
   const u = new URL(location.href); u.searchParams.set('escena', id); u.searchParams.delete('vr'); u.searchParams.delete('ar'); history.replaceState(null, '', u);
+  document.body.classList.toggle('has-stops', !!w.stops);
   if (xrKind) w.onXRStart && w.onXRStart(xrKind === 'ar' && !w.hasAR ? 'vr' : xrKind);
   say('Listo.');
 }
@@ -168,6 +177,8 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   for (const p of panels) if (p.visible) { const i = p.pickWith(rcAim); if (i >= 0) { p.click(i); e.stopImmediatePropagation(); return; } }
   if (companion.pickRay(rcAim) >= 0) { app.onCompanionGrab(); e.stopImmediatePropagation(); }
 }, true);
+const togglePanelDesktop = () => { if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else { panel.showFront(active.scene, active.camera); if (active.stops) panel.setPage('clase'); } };
+mountTouchUI({ input, onPanel: togglePanelDesktop, onNext: () => { if (active.stops) app.gotoStop(Math.min(active.stops.length - 1, app.stopIndex() + 1)); }, hasStops: true });
 addEventListener('keydown', (e) => {
   if (!active || renderer.xr.isPresenting) return;
   if (e.key === 'm' || e.key === 'M') { if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else { panel.showFront(active.scene, active.camera); if (active.stops) panel.setPage('clase'); } }
@@ -224,7 +235,7 @@ renderer.setAnimationLoop((_, frame) => {
       if (vp) { mHead.fromArray(vp.transform.matrix); if (active.rig) { active.rig.updateMatrixWorld(true); mHead.premultiply(active.rig.matrixWorld); } camPosV.setFromMatrixPosition(mHead); camDirV.set(0, 0, -1).transformDirection(mHead); have = true; }
     }
     if (!have) { const cam = xr ? renderer.xr.getCamera() : active.camera; cam.getWorldPosition(camPosV); cam.getWorldDirection(camDirV); }
-    if (xr) { pollXRInput(); body.update(dt, camPosV, camDirV); }
+    if (xr) { pollXRInput(); body.update(dt, camPosV, camDirV); body.highlight(companion.held ? body.slotAt(companion.group.getWorldPosition(new THREE.Vector3())) : -1); }
     companion.update(dt, camPosV, camDirV, performance.now() / 1000);
     if (guide.target >= 0 && active.stops) { const s = active.stops[guide.target]; if (Math.hypot(camPosV.x - s.pos[0], camPosV.z - s.pos[2]) < 4.5) { const i = guide.target; guide.target = -1; active.mv.play(i); } }
   } catch (e) { if (errCount++ < 5) { console.error(e); say('Error en la escena: ' + (e.message || e)); } }
