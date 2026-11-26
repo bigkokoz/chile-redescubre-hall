@@ -27,3 +27,13 @@ export const VIAJE_STOPS = [MAQUINA, ...MV_STOPS.map((s) => ({ ...s, texto: AJUS
 export const FRASES = {
   llegada: 'Llegaste. Estás en el mismo lugar, pero hace unos catorce mil ochocientos años. Acércate a las esferas luminosas y escucha.',
 };
+
+/** Qué decir al agarrar cada comida (todo sale de los restos que menciona la ficha; sin inventar). */
+export const COMIDA = {
+  papa: 'Papa silvestre. En Monte Verde se encontraron restos de papas silvestres: eran parte de la comida del grupo.',
+  bayas: 'Bayas. Entre los restos hay frutas y bayas, que se recolectaban cerca del campamento.',
+  alga: 'Alga marina. Se recolectaban en la costa del Pacífico y se llevaban al campamento: aportan yodo y sal.',
+  carne: 'Carne. Hay restos de animales, incluso de grandes animales como mastodontes. No se sabe si los cazaban o los aprovechaban ya muertos.',
+  nuez: 'Nueces y semillas. También se encontraron restos de semillas y nueces.',
+  hongo: 'Hongos. Aparecen entre los restos de alimentos del campamento.',
+};

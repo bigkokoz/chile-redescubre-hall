@@ -40,15 +40,15 @@ let savedLoco = {}; try { savedLoco = JSON.parse(localStorage.getItem('hall.loco
 const loco = { ...LOCO_DEF, ...savedLoco };
 const saveLoco = () => { try { localStorage.setItem('hall.loco', JSON.stringify(loco)); } catch { /* ignorar */ } syncLocoDom(); };
 // Sonido: cada categoría se puede bajar o apagar (por defecto todo muy sutil; sin zumbido de picaflor ni grillos)
-const AUD_DEF = { master: 1, ambiente: 0.35, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.8, narracion: 1 };
+const AUD_DEF = { master: 1, ambiente: 0.35, rio: 0.6, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.8, narracion: 1 };
 let savedAud = {}; try { savedAud = JSON.parse(localStorage.getItem('hall.aud') || '{}'); } catch { /* sin guardado */ }
 const aud = { ...AUD_DEF, ...savedAud };
 const saveAud = () => { try { localStorage.setItem('hall.aud', JSON.stringify(aud)); } catch { /* ignorar */ } };
 const AUD_PRESETS = {
-  sutil: { ambiente: 0.35, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.7, narracion: 1 },
-  completo: { ambiente: 0.8, pajaros: 0.85, grillos: 0.5, picaflor: 0.4, efectos: 1, narracion: 1 },
-  narracion: { ambiente: 0.12, pajaros: 0.15, grillos: 0, picaflor: 0, efectos: 0.4, narracion: 1 },
-  silencio: { ambiente: 0, pajaros: 0, grillos: 0, picaflor: 0, efectos: 0, narracion: 0 },
+  sutil: { rio: 0.5, ambiente: 0.35, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.7, narracion: 1 },
+  completo: { rio: 0.9, ambiente: 0.8, pajaros: 0.85, grillos: 0.5, picaflor: 0.4, efectos: 1, narracion: 1 },
+  narracion: { rio: 0.1, ambiente: 0.12, pajaros: 0.15, grillos: 0, picaflor: 0, efectos: 0.4, narracion: 1 },
+  silencio: { rio: 0, ambiente: 0, pajaros: 0, grillos: 0, picaflor: 0, efectos: 0, narracion: 0 },
 };
 let active = null, xrKind = null;
 const guide = { target: -1 };
@@ -192,8 +192,8 @@ function pollXRInput() {
   const session = renderer.xr.getSession(); if (!session) return;
   for (const src of session.inputSources) {
     const gp = src.gamepad; if (!gp || !gp.buttons[3]) continue;     // clic del joystick = panel delante de ti / mandarlo a volar
-    const on = !!gp.buttons[3].pressed, key = src.handedness;
-    if (on && !latch[key]) { app.suppressUntil = performance.now() + 150; if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else panel.showFront(active.scene, renderer.xr.getCamera()); }
+    const on = !!gp.buttons[3].pressed, key = src.handedness, mag = Math.hypot(gp.axes[2] || 0, gp.axes[3] || 0);
+    if (on && !latch[key] && mag < 0.45) { /* con el joystick empujado, apretarlo es correr: no abre el panel */ app.suppressUntil = performance.now() + 150; if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else panel.showFront(active.scene, renderer.xr.getCamera()); }
     latch[key] = on;
   }
 }

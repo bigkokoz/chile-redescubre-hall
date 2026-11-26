@@ -4,7 +4,7 @@ import * as P from './papel.js';
 import * as M from './papel_mv.js';
 import { createToys, makeCup, makeOrb } from './juguetes.js';
 import { HallAudio } from './audio.js';
-import { VIAJE_STOPS } from './viaje_data.js';
+import { VIAJE_STOPS, COMIDA } from './viaje_data.js';
 
 // ============================================================================
 // EL VIAJE A MONTE VERDE — mundo hecho en Blender (luz horneada, como la Casa).
@@ -149,6 +149,13 @@ export async function createViaje(app) {
   const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(ep, 3));
   const embers = new THREE.Points(eg, new THREE.PointsMaterial({ color: 0xffa040, size: 0.05, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); embers.frustumCulled = false; fireG.add(embers);
   let fireE = 0.8;
+  const smokeCv = document.createElement('canvas'); smokeCv.width = smokeCv.height = 64; { const x = smokeCv.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(200,200,200,0.9)'); g.addColorStop(0.5, 'rgba(160,160,160,0.35)'); g.addColorStop(1, 'rgba(120,120,120,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); }
+  const smokeTex = P.toTex(smokeCv), smoke = [];
+  for (let i = 0; i < 16; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, depthWrite: false, opacity: 0, fog: true })); fireG.add(sp); smoke.push({ sp, t: i / 16 * 6, dur: 6, sx: Math.random() - 0.5 }); }
+  const moteN = 140, motePos = new Float32Array(moteN * 3), moteSeed = [];
+  for (let i = 0; i < moteN; i++) { const a = Math.random() * 6.283, r = 1 + Math.random() * 13; motePos.set([FIRE.x + Math.cos(a) * r, FIRE.y + 0.3 + Math.random() * 3.5, FIRE.z + Math.sin(a) * r], i * 3); moteSeed.push(Math.random() * 6.28); }
+  const moteGeo = new THREE.BufferGeometry(); moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+  const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ map: glowTex, size: 0.09, color: 0xe8ffb0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); motes.frustumCulled = false; gP.add(motes);
 
   // ---- máquina del tiempo (palanca) y cristal de regreso ----
   const CON = bl(layH.consola), LEVER = new THREE.Vector3(CON.x, CON.y + 0.955, CON.z);
@@ -244,7 +251,10 @@ export async function createViaje(app) {
     },
   };
   function markVisited(i) { const s = stopObjs[i]; if (s) { s.visited = true; s.core.material.color.set(0xffd27a); s.halo.material.color.set(0xffb050); } }
-  const village = { pickStop(rc) { const h = rc.intersectObjects(stopHits.filter((m) => m.parent.visible), false)[0]; return h ? h.object.userData.stop : -1; }, markVisited, onAudioStart() {}, update() {} };
+  const village = {
+    pickStop(rc) { let best = -1, bd = 0.55; stopObjs.forEach((s) => { if (!s.g.visible) return; const d = rayDist(rc, s.g.getWorldPosition(new THREE.Vector3())); if (d < bd) { bd = d; best = s.i; } }); return best; },
+    markVisited, onAudioStart() {}, update() {},
+  };
 
   // ---- reglas de movimiento: el muro de roca y el cauce hondo no se cruzan ----
   const MARGIN = { x: 40, zMin: -38, zMax: 44 };
@@ -253,13 +263,12 @@ export async function createViaje(app) {
     const by = -z; if (by < yc(x) - halfw(x) - 0.2) return false;        // muro de roca al sur
     return ground(x, z) >= bed(x) + 0.28;                                  // el centro del cauce es muy hondo
   }
-  const prevP = new THREE.Vector2(rig.position.x, rig.position.z);
-  function constrain() {
-    const x = rig.position.x, z = rig.position.z;
-    if (!canStand(x, z)) {
-      if (canStand(x, prevP.y)) rig.position.z = prevP.y; else if (canStand(prevP.x, z)) rig.position.x = prevP.x; else { rig.position.x = prevP.x; rig.position.z = prevP.y; }
-    }
-    prevP.set(rig.position.x, rig.position.z);
+  const headW = new THREE.Vector3();
+  /** mueve al jugador (dx, dz) si la cabeza queda en un lugar permitido; si no, resbala por el muro; si ya estaba atrapado, deja salir */
+  function move(dx, dz) {
+    const ox = headW.x, oz = headW.z; let mx = dx, mz = dz;
+    if (!canStand(ox + dx, oz + dz) && canStand(ox, oz)) { if (canStand(ox + dx, oz)) mz = 0; else if (canStand(ox, oz + dz)) mx = 0; else { mx = 0; mz = 0; } }
+    rig.position.x += mx; rig.position.z += mz; headW.x += mx; headW.z += mz;
   }
 
   // ---- interacción ----
@@ -267,7 +276,11 @@ export async function createViaje(app) {
   const toysNow = () => (T.era === 'hoy' ? toysH : toysP);
   const pickToy = (rc) => { const hit = rc.intersectObjects(toysNow().pickables(), false)[0]; return hit ? { b: hit.object.userData.toy, dist: hit.distance } : null; };
   const rayFrom = (c) => { tmpM.identity().extractRotation(c.matrixWorld); raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld); raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tmpM); raycaster.far = 6; return raycaster; };
-  const hitsObj = (rc, o) => o.parent && o.parent.visible && rc.intersectObject(o, false).length > 0;
+  const _c = new THREE.Vector3(), _p = new THREE.Vector3();
+  /** distancia del rayo a un punto (0.. si está delante del rayo y cerca); -1 si queda detrás o lejos */
+  function rayDist(rc, pt) { _c.copy(pt).sub(rc.ray.origin); const t = _c.dot(rc.ray.direction); if (t < 0.05 || t > 7) return 9; _p.copy(rc.ray.direction).multiplyScalar(t).add(rc.ray.origin); return _p.distanceTo(pt); }
+  const wp = (o, off) => o.localToWorld(_c.copy(off || new THREE.Vector3()).clone());
+  const hitsObj = (rc, o) => { if (!(o.parent && o.parent.visible)) return false; const pt = o === leverHit ? wp(lever, new THREE.Vector3(0, 0.45, 0)) : wp(o); return rayDist(rc, pt) < (o === leverHit ? 0.38 : 0.6); };
   /** gesto sobre algo del mundo: palanca, cristal, parada. Devuelve true si lo usó. */
   function useWorld(rc) {
     if (T.era === 'hoy' && !T.moving && hitsObj(rc, leverHit)) { pullLever(); return true; }
@@ -275,6 +288,7 @@ export async function createViaje(app) {
     const si = village.pickStop(rc); if (si >= 0) { mv.play(si); return true; }
     return false;
   }
+  function foodTalk(b) { const txt = T.era === 'antes' && COMIDA[b.kind]; if (!txt || app.narr.state.playing) return; app.narr.play({ id: 'comida', titulo: 'Comida del campamento', texto: [txt], qa: [] }); }
   const held = new Map(); let drag = null;
   const busy = () => !active || performance.now() < app.suppressUntil || app.menuOpen();
   app.controllers.forEach((c) => {
@@ -283,25 +297,25 @@ export async function createViaje(app) {
       if (busy()) return; startAudio();
       if (useWorld(rayFrom(c))) return;
       const it = pickToy(rayFrom(c));
-      if (it) { toysNow().grab(it.b, c); held.set(c, { b: it.b, ts: toysNow() }); line.visible = false; } else if (!drag && app.loco.grab) drag = { c, prev: c.position.clone() };
+      if (it) { toysNow().grab(it.b, c); foodTalk(it.b); held.set(c, { b: it.b, ts: toysNow() }); line.visible = false; } else if (!drag && app.loco.grab) drag = { c, prev: c.position.clone() };
     };
     const end = () => { const h = held.get(c); if (h) { h.ts.release(h.b); held.delete(c); } line.visible = true; if (drag && drag.c === c) drag = null; };
     c.addEventListener('selectstart', start); c.addEventListener('selectend', end); c.addEventListener('squeezestart', start); c.addEventListener('squeezeend', end);
   });
-  const yawQ = new THREE.Quaternion(), fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), headW = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), tmpV = new THREE.Vector3();
+  const yawQ = new THREE.Quaternion(), fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), tmpV = new THREE.Vector3();
   let snapLatch = false; const dz = (v) => (Math.abs(v) < 0.15 ? 0 : v);
   function locomotionXR(dt, cam) {
     const session = renderer.xr.getSession(); if (!session) return; cam.getWorldPosition(headW);
     for (const src of session.inputSources) {
       const gp = src.gamepad; if (!gp) continue; const ax = gp.axes, hand = src.handedness, x = dz(ax[2] || 0), y = dz(ax[3] || 0);
-      if (hand === 'left' && (x || y) && app.loco.joystick) { cam.getWorldQuaternion(yawQ); fwd.set(0, 0, -1).applyQuaternion(yawQ); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x); rig.position.addScaledVector(fwd, -y * app.loco.speed * dt).addScaledVector(rgt, x * app.loco.speed * dt); }
+      if (hand === 'left' && (x || y) && app.loco.joystick) { cam.getWorldQuaternion(yawQ); fwd.set(0, 0, -1).applyQuaternion(yawQ); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x); const sp = app.loco.speed * (gp.buttons[3] && gp.buttons[3].pressed ? 2.2 : 1) * dt; move(-fwd.x * y * sp + rgt.x * x * sp, -fwd.z * y * sp + rgt.z * x * sp); }   // apretar el joystick caminando = correr
       if (hand === 'right' && app.loco.snap) {
         if (app.loco.smooth) { if (x) { const a = -x * THREE.MathUtils.degToRad(app.loco.turnSpeed) * dt; rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; } }
         else if (Math.abs(x) > 0.7 && !snapLatch) { snapLatch = true; const a = -Math.sign(x) * THREE.MathUtils.degToRad(app.loco.snapDeg); rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; } else if (Math.abs(x) < 0.3) snapLatch = false;
       }
     }
     if (drag && !app.loco.grab) drag = null;
-    if (drag) { const cur = drag.c.position, d = drag.prev.clone().sub(cur); d.y = 0; d.applyQuaternion(rig.quaternion).multiplyScalar(app.loco.gain); rig.position.add(d); drag.prev.copy(cur); }
+    if (drag) { const cur = drag.c.position, d = drag.prev.clone().sub(cur); d.y = 0; d.applyQuaternion(rig.quaternion).multiplyScalar(app.loco.gain); move(d.x, d.z); drag.prev.copy(cur); }
   }
   // escritorio / celular
   let active = false, yaw = Math.PI, pitch = -0.08, dragLook = false, lx = 0, ly = 0, lookId = -1, mouseItem = null, mouseDist = 1, mouseHover = null;
@@ -311,13 +325,13 @@ export async function createViaje(app) {
     if (!active) return; startAudio(); if (renderer.xr.isPresenting) return; ndc(e);
     if (useWorld(raycaster)) return;
     const it = pickToy(raycaster);
-    if (it) { mouseItem = { b: it.b, ts: toysNow() }; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.getWorldQuaternion(new THREE.Quaternion())); mouseHand.updateMatrixWorld(true); mouseItem.ts.grab(it.b, mouseHand); return; }
+    if (it) { mouseItem = { b: it.b, ts: toysNow() }; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.getWorldQuaternion(new THREE.Quaternion())); mouseHand.updateMatrixWorld(true); mouseItem.ts.grab(it.b, mouseHand); foodTalk(it.b); return; }
     dragLook = true; lx = e.clientX; ly = e.clientY; lookId = e.pointerId;
   });
   addEventListener('pointerup', () => { if (!active) return; dragLook = false; if (mouseItem) { mouseItem.ts.release(mouseItem.b); mouseItem = null; } });
   addEventListener('pointermove', (e) => {
     if (!active || renderer.xr.isPresenting) return; ndc(e);
-    if (!mouseItem) { mouseHover = pickToy(raycaster); const over = hitsObj(raycaster, leverHit) || hitsObj(raycaster, cHit) || village.pickStop(raycaster) >= 0; renderer.domElement.style.cursor = mouseHover || over ? 'pointer' : dragLook ? 'grabbing' : 'grab'; }
+    if (!mouseItem) { mouseHover = pickToy(raycaster); const over = (T.era === 'hoy' && hitsObj(raycaster, leverHit)) || (T.era === 'antes' && hitsObj(raycaster, cHit)) || village.pickStop(raycaster) >= 0; renderer.domElement.style.cursor = mouseHover || over ? 'pointer' : dragLook ? 'grabbing' : 'grab'; }
     if (!dragLook || e.pointerId !== lookId) return; yaw -= (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY;
   });
   addEventListener('keydown', (e) => { if (!active) return; startAudio(); keys.add(e.key.toLowerCase()); if (e.key === 't' || e.key === 'T') { if (T.era === 'hoy') pullLever(); else travel('hoy'); } if (e.key === 'r' || e.key === 'R') toysNow().resetAll(); });
@@ -325,19 +339,20 @@ export async function createViaje(app) {
 
   // ---- bucle ----
   const eased = (u) => u * u * (3 - 2 * u);
-  const col1 = new THREE.Color(), tNow = { t: 0 }; let chirpT = 6, autoT = 0;
+  const col1 = new THREE.Color(), tNow = { t: 0 }; let chirpT = 6, autoT = 0, aimed = -1;
   const camW = new THREE.Vector3(), tmpA = new THREE.Vector3();
   function update(dt) {
     tNow.t += dt; const t = tNow.t, xrOn = renderer.xr.isPresenting, cam = xrOn ? renderer.xr.getCamera() : camera;
     // movimiento
+    headW.set(rig.position.x, 0, rig.position.z);
     if (!xrOn) {
-      app.input.look(camera, pitch, yaw); { const jm = app.input.move; if (jm.x || jm.y) { camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x); rig.position.addScaledVector(fwd, jm.y * app.loco.speed * dt).addScaledVector(rgt, jm.x * app.loco.speed * dt); } }
+      app.input.look(camera, pitch, yaw); { const jm = app.input.move; if (jm.x || jm.y) { camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x); move((fwd.x * jm.y + rgt.x * jm.x) * app.loco.speed * dt, (fwd.z * jm.y + rgt.z * jm.x) * app.loco.speed * dt); } }
       camera.position.set(0, 1.62, 0);
       const sp = (keys.has('shift') ? 2 : 1) * app.loco.speed * dt; fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); rgt.set(-fwd.z, 0, fwd.x);
-      if (keys.has('w') || keys.has('arrowup')) rig.position.addScaledVector(fwd, sp); if (keys.has('s') || keys.has('arrowdown')) rig.position.addScaledVector(fwd, -sp);
-      if (keys.has('d') || keys.has('arrowright')) rig.position.addScaledVector(rgt, sp); if (keys.has('a') || keys.has('arrowleft')) rig.position.addScaledVector(rgt, -sp);
+      if (keys.has('w') || keys.has('arrowup')) move(fwd.x * sp, fwd.z * sp); if (keys.has('s') || keys.has('arrowdown')) move(-fwd.x * sp, -fwd.z * sp);
+      if (keys.has('d') || keys.has('arrowright')) move(rgt.x * sp, rgt.z * sp); if (keys.has('a') || keys.has('arrowleft')) move(-rgt.x * sp, -rgt.z * sp);
     } else locomotionXR(dt, cam);
-    constrain(); rig.position.y += (ground(rig.position.x, rig.position.z) - rig.position.y) * Math.min(1, dt * 10);
+    rig.position.y += (ground(rig.position.x, rig.position.z) - rig.position.y) * Math.min(1, dt * 10);
     cam.getWorldPosition(camW);
     // viaje
     if (T.moving) {
@@ -360,7 +375,8 @@ export async function createViaje(app) {
     fireG.visible = campPast; crystal.visible = campPast && !T.moving; leverLabel.visible = !T.moving && !pastAt(CON); lever.visible = !pastAt(CON);
     gP.visible = T.era === 'antes' || T.moving; gH.visible = T.era === 'hoy' || T.moving;   // solo se dibuja la época en que estás (ahorra mucho en el Quest)
     toysH.hoverSet.clear(); toysP.hoverSet.clear();
-    stopObjs.forEach((s) => { const vis = s.i === 0 ? !pastAt(CON) : pastAt(tmpA.set(s.base.x, 0, s.base.z)); s.g.visible = vis && !(s.i === 0 && T.moving); s.g.position.y = s.base.y + Math.sin(t * 1.1 + s.i) * 0.05; const d = camW.distanceTo(s.g.position); s.lab.material.opacity = THREE.MathUtils.clamp((6 - d) / 2.5, 0, 1); s.halo.scale.setScalar(0.45 + Math.sin(t * 2 + s.i) * 0.06); });
+    aimed = -1; if (xrOn) app.controllers.forEach((c) => { const a = village.pickStop(rayFrom(c)); if (a >= 0) aimed = a; }); else if (!dragLook) { const a = village.pickStop(raycaster); if (a >= 0) aimed = a; }
+    stopObjs.forEach((s) => { const vis = s.i === 0 ? !pastAt(CON) : pastAt(tmpA.set(s.base.x, 0, s.base.z)); s.g.visible = vis && !(s.i === 0 && T.moving); s.g.position.y = s.base.y + Math.sin(t * 1.1 + s.i) * 0.05; const d = camW.distanceTo(s.g.position); s.lab.material.opacity = THREE.MathUtils.clamp((6 - d) / 2.5, 0, 1); s.halo.scale.setScalar((0.45 + Math.sin(t * 2 + s.i) * 0.06) * (aimed === s.i ? 1.9 : 1)); s.lab.material.opacity = Math.max(s.lab.material.opacity, aimed === s.i ? 1 : 0); });
     for (const p of peopleList) {
       const on = pastAt(p.p0); p.pop += ((on ? 1 : 0) - p.pop) * Math.min(1, dt * 3); p.m.visible = p.pop > 0.03;
       if (!p.m.visible) continue;
@@ -379,6 +395,8 @@ export async function createViaje(app) {
       for (let i = 0; i < emberN; i++) { let y = ep[i * 3 + 1] + dt * (0.5 + eSeed[i]) * (0.6 + fireE * 0.5); if (y > 1.8 + fireE) y = 0.1; ep[i * 3 + 1] = y; ep[i * 3] += Math.sin(t * 2 + eSeed[i] * 9) * 0.0016; }
       eg.attributes.position.needsUpdate = true;
     }
+    if (fireG.visible) for (const sm of smoke) { sm.t += dt; if (sm.t > sm.dur) { sm.t = 0; sm.sx = Math.random() - 0.5; } const u = sm.t / sm.dur; sm.sp.position.set(sm.sx * u * 1.6 + u * 1.2, 0.9 + u * 3.2, Math.sin(sm.t + sm.sx * 9) * 0.25 * u); sm.sp.scale.setScalar(0.35 + u * 1.7); sm.sp.material.opacity = Math.sin(Math.PI * Math.min(1, u * 1.15)) * 0.2 * (0.5 + fireE * 0.5); }
+    if (motes.visible) { const pa = moteGeo.attributes.position.array; for (let i = 0; i < moteN; i++) { pa[i * 3 + 1] += Math.sin(t * 0.6 + moteSeed[i]) * 0.0016; pa[i * 3] += Math.cos(t * 0.4 + moteSeed[i] * 2) * 0.0014; pa[i * 3 + 2] += Math.sin(t * 0.3 + moteSeed[i] * 3) * 0.0012; } moteGeo.attributes.position.needsUpdate = true; }
     crystal.rotation.y = t * 0.8; cWire.rotation.set(t * 0.5, -t * 0.7, 0); crystal.position.y = crystalPos.y + Math.sin(t * 1.3) * 0.06;
     waterTex.offset.y -= dt * 0.3; foamTex.offset.y -= dt * 0.9;
     // juguetes
@@ -392,13 +410,13 @@ export async function createViaje(app) {
       rivEm.position.set(Math.max(-40, Math.min(40, camW.x)), bed(camW.x) + 0.8, -yc(Math.max(-40, Math.min(40, camW.x))));
       let inTent = false; if (T.era === 'antes') (layA.carpas || []).forEach((c) => { if (Math.hypot(camW.x - c[0], camW.z + c[1]) < c[3] - 0.35) inTent = true; });
       lpTarget = inTent ? 420 : 20000; if (lp) lp.frequency.value += (lpTarget - lp.frequency.value) * Math.min(1, dt * 6);
-      const rv = AV('ambiente'); if (rivA) rivA.setVolume(0.5 * rv * (inTent ? 0.7 : 1)); if (rivB) rivB.setVolume(0.7 * rv * (inTent ? 0.7 : 1));
+      const rv = AV('ambiente'), rr = AV('rio'); if (rivA) rivA.setVolume(0.8 * rr * (inTent ? 0.7 : 1)); if (rivB) rivB.setVolume(1.1 * rr * (inTent ? 0.7 : 1));
       const pa = campPast ? T.blend : 0; if (murm) murm.setVolume(0.32 * pa * rv * (inTent ? 0.35 : 1)); if (fuegoS) fuegoS.setVolume(Math.min(1, 0.2 + fireE * 0.12) * pa * rv); if (wind) wind.setVolume(0.08 * rv * (1 - 0.5 * T.blend));
       chirpT -= dt; if (chirpT <= 0 && T.blend > 0.9) { chirpT = 6 + Math.random() * 9; const a = Math.random() * 6.283, d = 7 + Math.random() * 9; try { audio.sfx(['chirp', 'trino', 'chucao'][(Math.random() * 3) | 0], new THREE.Vector3(camW.x + Math.cos(a) * d, 3 + Math.random() * 4, camW.z + Math.sin(a) * d), 0.3); } catch { /* sin audio */ } }
     }
     // la clase explica sola al acercarte a una esfera nueva
     autoT -= dt;
-    if (autoT <= 0 && audioOn) { autoT = 0.4; if (!app.narr.state.playing && !T.moving) for (const s of stopObjs) { if (!s.visited && s.g.visible && camW.distanceTo(s.g.position) < 2.2) { mv.play(s.i); break; } } }
+    if (autoT <= 0) { autoT = 0.4; if (!app.narr.state.playing && !T.moving) for (const s of stopObjs) { if (!s.visited && s.g.visible && camW.distanceTo(s.g.position) < 2.2) { mv.play(s.i); break; } } }
   }
   const applyActive = (on) => {
     active = on; audio.listener.setMasterVolume(on ? 1 : 0);

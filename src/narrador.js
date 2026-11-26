@@ -9,6 +9,8 @@ export function hashText(t) { let h = 0x811c9dc5; for (let i = 0; i < t.length; 
 export function createNarrator(app) {
   const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
   const st = { stop: null, mode: 'stop', sentences: [], idx: 0, playing: false, rate: 1, hasVoice: false, files: false, lastTitle: '', answerQ: '' };
+  const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const el = typeof Audio !== 'undefined' ? new Audio() : null;       // un solo reproductor: se desbloquea con un toque y se reutiliza
   let cur = null, fileFails = 0;
   const fileUrl = (text) => new URL(`narracion/${hashText(text)}.mp3`, document.baseURI).href;
   // ¿hay narradora grabada? (carpeta narracion/ con manifest.json)
@@ -36,19 +38,18 @@ export function createNarrator(app) {
       try { synth.speak(u); } catch { timer = setTimeout(advance, 1500); }
     } else timer = setTimeout(advance, Math.max(2200, (text.length / 13) * 1000 / st.rate));   // sin voz o en silencio: avanza como lectura
     };
-    if (st.files && fileFails < 3 && vol() > 0.01) {                  // plan A: narradora chilena grabada
-      const a = new Audio(fileUrl(text)); cur = a; a.volume = vol(); a.playbackRate = st.rate;
-      a.onended = () => { fileFails = 0; advance(); };
-      a.onerror = () => { fileFails++; if (my === token && st.playing) soft(); };
-      a.play().catch(() => { if (my === token && st.playing && cur === a) { fileFails++; soft(); } });
-      const nx = st.sentences[st.idx + 1]; if (nx) { const pre = new Audio(fileUrl(nx)); pre.preload = 'auto'; }
+    if (st.files && el && fileFails < 3 && vol() > 0.01) {            // plan A: narradora chilena grabada
+      cur = el; el.onended = () => { fileFails = 0; advance(); };
+      el.onerror = () => { fileFails++; if (my === token && st.playing) soft(); };
+      el.src = fileUrl(text); el.volume = vol(); el.playbackRate = st.rate;
+      const pr = el.play(); if (pr && pr.catch) pr.catch((err) => { if (my !== token || !st.playing) return; if (err && err.name === 'NotAllowedError') { st.blocked = true; onChange(); } else fileFails++; soft(); });
     } else soft();
   }
   const api = {
     state: st,
     set onChange(fn) { onChange = fn; },
     /** Prepara el audio con un toque del usuario (algunos navegadores lo exigen). */
-    prime() { if (!synth) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); } catch { /* ok */ } refreshVoice(); },
+    prime() { if (el) { try { el.src = SILENT; el.volume = 0; const pr = el.play(); if (pr && pr.catch) pr.catch(() => {}); } catch { /* ok */ } st.blocked = false; } if (!synth) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); } catch { /* ok */ } refreshVoice(); },
     play(stop) { st.stop = stop; st.mode = 'stop'; st.sentences = splitSentences(stop.texto); st.idx = 0; st.playing = true; st.answerQ = ''; onChange(); speak(); },
     answer(q, a) { st.mode = 'answer'; st.answerQ = q; st.sentences = splitSentences(a); st.idx = 0; st.playing = true; onChange(); speak(); },
     pause() { st.playing = false; clear(); onChange(); },

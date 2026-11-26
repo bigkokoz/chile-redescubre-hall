@@ -480,7 +480,7 @@ function locomotionXR(dt, cam) {
     const x = dz(ax[2] || 0), y = dz(ax[3] || 0);
     if (hand === 'left' && (x || y) && app.loco.joystick) {
       cam.getWorldQuaternion(yawQ); fwd.set(0, 0, -1).applyQuaternion(yawQ); fwd.y = 0; fwd.normalize(); rgt.set(-fwd.z, 0, fwd.x);
-      rig.position.addScaledVector(fwd, -y * app.loco.speed * dt).addScaledVector(rgt, x * app.loco.speed * dt);
+      const spd = app.loco.speed * (gp.buttons[3] && gp.buttons[3].pressed ? 2.2 : 1); rig.position.addScaledVector(fwd, -y * spd * dt).addScaledVector(rgt, x * spd * dt);
     }
     if (hand === 'right' && app.loco.snap) {
       if (app.loco.smooth) { if (x) { const a = -x * THREE.MathUtils.degToRad(app.loco.turnSpeed) * dt; rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; } }

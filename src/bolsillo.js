@@ -112,7 +112,7 @@ export function createPanel(app) {
       const pr = (nm) => app.setAudPreset(nm);
       btn(0, 0, 4, 'Sutil', () => pr('sutil')); btn(0, 1, 4, 'Ambiente completo', () => pr('completo')); btn(0, 2, 4, 'Solo narración', () => pr('narracion')); btn(0, 3, 4, 'Silencio', () => pr('silencio'));
       const row = (i, label, key) => stepper(i, label, () => A()[key], (v) => `${Math.round(v * 100)}%`, () => { A()[key] = Math.max(0, +(A()[key] - 0.1).toFixed(2)); app.saveAud(); }, () => { A()[key] = Math.min(1, +(A()[key] + 0.1).toFixed(2)); app.saveAud(); });
-      row(1, 'Volumen general', 'master'); row(2, 'Ambiente (viento, lluvia, fuego, agua)', 'ambiente'); row(3, 'Pájaros', 'pajaros'); row(4, 'Grillos de noche', 'grillos'); row(5, 'Zumbido del picaflor', 'picaflor'); row(6, 'Golpes, rebotes y colihuacho', 'efectos'); row(7, 'Narración de la clase', 'narracion');
+      row(1, 'Volumen general', 'master'); row(2, 'Ambiente (viento, lluvia, fuego)', 'ambiente'); row(3, 'Pájaros', 'pajaros'); row(4, 'Grillos de noche', 'grillos'); row(5, 'Zumbido del picaflor', 'picaflor'); row(6, 'Golpes, rebotes y colihuacho', 'efectos'); row(7, 'Narración de la clase', 'narracion'); row(8, 'Río y agua', 'rio');
     } else if (page === 'mundo') {
       const c = C();
       if (!c) els.push({ x: X, y: y0, w: RW, h: rowH * 2, type: 'note', label: 'Esta escena no tiene clima. En la casa usa los discos para cambiar de ambiente.' });
