@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { maybeInstallEmulator } from './emu.js';
 import { createCasa } from './world_casa.js';
 import { createBosque } from './world_bosque.js';
@@ -134,6 +134,7 @@ async function startXR(kind) {
 function setPresenting(on) { $('ui').classList.toggle('hidden', on); menu.hide(on); }
 $('btnVR').onclick = () => startXR('vr');
 $('btnAR').onclick = () => startXR('ar');
+const btnS = $('btnSonido'); const syncS = () => { btnS.textContent = aud.master > 0 ? '🔊 Sonido' : '🔇 Silencio'; }; btnS.onclick = () => { aud.master = aud.master > 0 ? 0 : 1; saveAud(); syncS(); }; syncS();
 let support = { ar: false, vr: false };
 (async () => {
   if (!navigator.xr) { say('Este navegador no tiene WebXR. Estás en vista previa. Abre esta página en el Meta Quest.'); return; }
@@ -242,3 +243,4 @@ renderer.setAnimationLoop((_, frame) => {
   renderer.render(active.scene, active.camera);      // siempre se dibuja, aunque algo falle
 });
 window.__app = { app, worlds, select, startXR, renderer, panel, panels, body, loco, companion, narr, aud, get active() { return active; } };
+
