@@ -11,7 +11,7 @@ export function createNarrator(app) {
   const st = { stop: null, mode: 'stop', sentences: [], idx: 0, playing: false, rate: 1, hasVoice: false, files: false, lastTitle: '', answerQ: '' };
   const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   const el = typeof Audio !== 'undefined' ? new Audio() : null;       // un solo reproductor: se desbloquea con un toque y se reutiliza
-  let cur = null, fileFails = 0;
+  let cur = null, fileFails = 0, primed = false;
   const fileUrl = (text) => new URL(`narracion/${hashText(text)}.mp3`, document.baseURI).href;
   // ¿hay narradora grabada? (carpeta narracion/ con manifest.json)
   if (typeof fetch !== 'undefined') fetch(new URL('narracion/manifest.json', document.baseURI)).then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) { st.files = true; st.hasVoice = true; onChange(); } }).catch(() => {});
@@ -42,16 +42,22 @@ export function createNarrator(app) {
       cur = el; el.onended = () => { fileFails = 0; advance(); };
       el.onerror = () => { fileFails++; if (my === token && st.playing) soft(); };
       el.src = fileUrl(text); el.volume = vol(); el.playbackRate = st.rate;
-      const pr = el.play(); if (pr && pr.catch) pr.catch((err) => { if (my !== token || !st.playing) return; if (err && err.name === 'NotAllowedError') { st.blocked = true; onChange(); } else fileFails++; soft(); });
+      const pr = el.play(); if (pr && pr.catch) pr.catch((err) => { if (my !== token || !st.playing) return; if (err && err.name === 'AbortError') return; if (err && err.name === 'NotAllowedError') { st.blocked = true; onChange(); } else fileFails++; soft(); });
     } else soft();
   }
   const api = {
     state: st,
     set onChange(fn) { onChange = fn; },
     /** Prepara el audio con un toque del usuario (algunos navegadores lo exigen). */
-    prime() { if (el) { try { el.src = SILENT; el.volume = 0; const pr = el.play(); if (pr && pr.catch) pr.catch(() => {}); } catch { /* ok */ } st.blocked = false; } if (!synth) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); } catch { /* ok */ } refreshVoice(); },
-    play(stop) { st.stop = stop; st.mode = 'stop'; st.sentences = splitSentences(stop.texto); st.idx = 0; st.playing = true; st.answerQ = ''; onChange(); speak(); },
-    answer(q, a) { st.mode = 'answer'; st.answerQ = q; st.sentences = splitSentences(a); st.idx = 0; st.playing = true; onChange(); speak(); },
+    /** Desbloquea el audio con un gesto. Nunca toca el reproductor mientras se narra (antes cortaba la frase en cada gatillo). */
+    prime() {
+      if (st.playing) { if (st.blocked) { st.blocked = false; fileFails = 0; speak(); } return; }     // la narradora estaba bloqueada: reintenta con este gesto
+      if (el && !primed) { primed = true; try { el.src = SILENT; el.volume = 0; const pr = el.play(); if (pr && pr.catch) pr.catch(() => { primed = false; }); } catch { primed = false; } }
+      st.blocked = false;
+      if (!synth) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); } catch { /* ok */ } refreshVoice();
+    },
+    play(stop) { fileFails = 0; st.stop = stop; st.mode = 'stop'; st.sentences = splitSentences(stop.texto); st.idx = 0; st.playing = true; st.answerQ = ''; onChange(); speak(); },
+    answer(q, a) { fileFails = 0; st.mode = 'answer'; st.answerQ = q; st.sentences = splitSentences(a); st.idx = 0; st.playing = true; onChange(); speak(); },
     pause() { st.playing = false; clear(); onChange(); },
     resume() { if (!st.sentences.length) return; st.playing = true; onChange(); speak(); },
     toggle() { st.playing ? api.pause() : api.resume(); },

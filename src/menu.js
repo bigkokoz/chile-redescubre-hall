@@ -6,7 +6,7 @@ export const ESCENAS = [
   { id: 'casa', titulo: 'Casa del hall', ver: 'v0.3', desc: 'Discos que transforman la casa · tazas que se rompen · paisajes 360', thumb: 'thumbs/casa.jpg', ar: true },
   { id: 'bosque', titulo: 'Bosque de papel', ver: 'v0.4', desc: 'Taller en el bosque valdiviano · camina, agarra, picaflor y lluvia', thumb: 'thumbs/bosque.jpg', ar: false },
   { id: 'antiguo', titulo: 'Bosque antiguo', ver: 'v0.6', desc: 'Troncos enormes con raíces y musgo lima · niebla verde · tocón de taller', thumb: 'thumbs/antiguo.jpg', ar: false },
-  { id: 'viaje', titulo: 'El viaje a Monte Verde', ver: 'v1.1', desc: 'Tira la palanca de la máquina del tiempo: del valle de hoy al campamento de hace 14.800 años · clase con narradora', thumb: 'thumbs/viaje.jpg', ar: false },
+  { id: 'viaje', titulo: 'El viaje a Monte Verde', ver: 'v1.1.1', desc: 'Tira la palanca de la máquina del tiempo: del valle de hoy al campamento de hace 14.800 años · clase con narradora', thumb: 'thumbs/viaje.jpg', ar: false },
 ];
 
 const ICON_VR = '<svg viewBox="0 0 48 28" width="34" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="40" height="19" rx="7"/><circle cx="16" cy="13.5" r="4.6"/><circle cx="32" cy="13.5" r="4.6"/><path d="M21 22.5l1.8-3h2.4l1.8 3"/></svg>';

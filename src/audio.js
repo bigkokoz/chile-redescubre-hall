@@ -32,6 +32,13 @@ function makeChimeBuffer(ctx, f) {
   return buf;
 }
 
+/** Despierta el audio del navegador/visor si está dormido (se llama en cada gesto, al entrar a VR y cada segundo). Devuelve el estado. */
+export function wakeAudio() {
+  const ctx = THREE.AudioContext.getContext();
+  if (ctx.state !== 'running') { try { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch { /* ok */ } }
+  return ctx.state;
+}
+
 // Efectos procedurales (golpes, vidrio/cerámica, rebote, pop, pío)
 function makeSfx(ctx) {
   const sr = ctx.sampleRate;
@@ -90,7 +97,7 @@ export class HallAudio {
     if (this.started) return;
     this.started = true;
     const ctx = THREE.AudioContext.getContext();
-    try { await ctx.resume(); } catch { /* ignore */ }
+    wakeAudio();         // sin esperar: si el visor lo tiene dormido, los sonidos arrancan en cuanto despierte
     this.bufs = makeSfx(ctx);
     for (let i = 0; i < 10; i++) {
       const h = new THREE.Object3D(); this.sfxRoot.add(h);

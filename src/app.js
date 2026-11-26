@@ -7,6 +7,8 @@ import { mountMenu, ESCENAS, vrButtonHTML, arButtonHTML } from './menu.js';
 import { createBody, createPanel } from './bolsillo.js';
 import { createCompanion } from './colihuacho.js';
 import { createNarrator } from './narrador.js';
+import { wakeAudio } from './audio.js';
+import { FRASES } from './viaje_data.js';
 import { createInput, mountTouchUI } from './touch.js';
 
 // ============================================================================
@@ -43,6 +45,8 @@ const saveLoco = () => { try { localStorage.setItem('hall.loco', JSON.stringify(
 const AUD_DEF = { master: 1, ambiente: 0.35, rio: 0.6, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.8, narracion: 1 };
 let savedAud = {}; try { savedAud = JSON.parse(localStorage.getItem('hall.aud') || '{}'); } catch { /* sin guardado */ }
 const aud = { ...AUD_DEF, ...savedAud };
+if (!(aud.master > 0)) aud.master = 1; if (!(aud.narracion > 0)) aud.narracion = 1;      // el silencio no se arrastra entre visitas (en el visor no hay forma fácil de notarlo)
+['pointerdown', 'keydown', 'click', 'touchend'].forEach((ev) => addEventListener(ev, () => wakeAudio(), true));
 const saveAud = () => { try { localStorage.setItem('hall.aud', JSON.stringify(aud)); } catch { /* ignorar */ } };
 const AUD_PRESETS = {
   sutil: { rio: 0.5, ambiente: 0.35, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.7, narracion: 1 },
@@ -55,7 +59,14 @@ const guide = { target: -1 };
 const input = createInput();
 const app = {
   renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco, aud, saveAud, guide, input,
-  setAudPreset: (n) => { Object.assign(aud, AUD_PRESETS[n]); saveAud(); },
+  setAudPreset: (n) => { Object.assign(aud, AUD_PRESETS[n]); if (n !== 'silencio') aud.master = Math.max(aud.master, 0.8); saveAud(); },
+  /** Botón "Probar": suena un campanazo y la narradora dice una frase; muestra el estado del audio. */
+  testSound: () => {
+    const st = wakeAudio(); narr.prime();
+    try { active.audio && active.audio.sfx('volver', camPosV, 1); } catch { /* sin audio */ }
+    narr.play({ id: 'prueba', titulo: 'Prueba de sonido', texto: [FRASES.llegada], qa: [] });
+    say(`Audio: ${st}. Narradora: ${narr.state.files ? 'grabada' : narr.state.hasVoice ? 'voz del visor' : 'sin voz'}.`);
+  },
   activeStops: () => (active && active.stops) || null,
   activeFinds: () => (active && active.finds) || null,
   stopIndex: () => (active && active.mv ? active.mv.cur : -1),
@@ -127,9 +138,10 @@ async function startXR(kind) {
     ? { requiredFeatures: ['local-floor'], optionalFeatures: ['plane-detection', 'mesh-detection', 'anchors', 'hit-test', 'hand-tracking'] }
     : { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor', 'hand-tracking'] };
   try {
-    narr.prime(); active.startAudio && active.startAudio();
+    narr.prime(); wakeAudio(); active.startAudio && active.startAudio();
     const session = await navigator.xr.requestSession(kind === 'ar' ? 'immersive-ar' : 'immersive-vr', init);
     app.features = session.enabledFeatures ? [...session.enabledFeatures] : [];
+    wakeAudio(); session.addEventListener('visibilitychange', () => wakeAudio());     // al entrar al visor el sistema puede dormir el audio
     session.addEventListener('end', () => { xrKind = null; setPresenting(false); active && active.onXRStop && active.onXRStop(); panels.forEach((p) => p.hide()); say('Sesión terminada.'); });
     await renderer.xr.setSession(session);
     xrKind = kind; setPresenting(true); active.onXRStart && active.onXRStart(kind === 'ar' && !active.hasAR ? 'vr' : kind);
@@ -162,7 +174,7 @@ function grabPanelWith(c) {
 controllers.forEach((c) => {
   c.addEventListener('selectstart', () => {          // gatillo / pellizco
     if (!active) return;
-    active.startAudio && active.startAudio(); narr.prime();
+    wakeAudio(); active.startAudio && active.startAudio(); narr.prime();
     for (const p of panels) if (p.visible) { const i = p.pick(c); if (i >= 0) { app.suppressUntil = performance.now() + 150; p.click(i); return; } }
     if (!companion.held && companion.pickRay(aimFrom(c)) >= 0) { app.suppressUntil = performance.now() + 250; companion.grab(c); return; }
     if (isHand(c) && renderer.xr.isPresenting && grabPanelWith(c)) app.suppressUntil = performance.now() + 250;   // con las manos: pellizcar dentro del bolsillo o sobre un panel
@@ -225,10 +237,11 @@ if (q.has('vr') || q.has('ar')) {
 
 // ---- bucle ----
 const clock = new THREE.Clock();
-let errCount = 0;
+let errCount = 0, wakeT = 0;
 const camPosV = new THREE.Vector3(), camDirV = new THREE.Vector3(), mHead = new THREE.Matrix4();
 renderer.setAnimationLoop((_, frame) => {
   const dt = Math.min(clock.getDelta(), 0.1);
+  wakeT -= dt; if (wakeT <= 0) { wakeT = 1; wakeAudio(); }
   try {
     const xr = renderer.xr.isPresenting;
     body.group.visible = xr;
