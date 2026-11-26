@@ -3,7 +3,7 @@
 Hall de entrada WebXR para el concurso **Chile Re-Descubre** (Taller de Diseño de Interfaces, UAI, Unidad 3).
 Entras a una **casa futurista con terraza** abierta a una selva infinita (360°). Sobre el escritorio hay una computadora y un rack con **cuatro discos**: agarras uno, lo metes en la ranura y una **línea de luz** recorre la casa y el paisaje transformándolos en el ambiente del disco (Autopoiesis, Desierto, Mar, Bosque). En **realidad mixta (passthrough)** la estación de discos aparece en miniatura sobre tu mesa real y los planos detectados (piso, paredes, mesas) se visten con el ambiente.
 
-> Estado: v0.7 (cuerpo + panel de bolsillo en VR, movimiento configurable, orbes en los bosques). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
+> Estado: v0.8 (Monte Verde: clase recorrida con colihuacho, narración, fuego y agua; paneles de bolsillo múltiples; sonido configurable; rocas y troncos con musgo). Casa modelada en Blender con luz horneada (Cycles) y paisajes 360 renderizados; los discos todavía son ambientes de prueba, el hito protagonista se define después.
 
 ## Versiones guardadas (etiquetas de git)
 | Etiqueta | Qué es |
@@ -13,6 +13,7 @@ Entras a una **casa futurista con terraza** abierta a una selva infinita (360°)
 | `v0.3-fisica` | Física de juguetes: lanzar, tazas que se rompen, pelotas, orbes, pájaros |
 | `v0.4-bosque` | Mundo 2: bosque de papel recorrible |
 | `v0.5-menu` | Selector de escenas, recorrido automático de la cámara, botones VR/AR con logo |
+| `v0.8-monteverde` | **Hito:** escena Monte Verde (villa con gran carpa de 12 habitaciones, estructura en U, fogones que se alimentan con ramitas, arroyo, gente haciendo cosas, animal grande); el colihuacho (figura geométrica que se posa en tu hombro, vuelve si lo lanzas, zumbido al agarrarlo) abre la clase con narración pausable, velocidad, preguntas y guía por paradas; hasta 3 paneles de bolsillo (se quedan donde los sueltas y despegan lento si no los usas); giro suave; panel de sonido con presets; rocas y troncos con musgo; cuerpo cristalino que se vuelve transparente si no lo miras |
 | `v0.7-bolsillo` | Cuerpo con bolsillos: sacas el panel con el grip, al soltarlo flota hacia arriba; páginas Escenas / Movimiento (activar o apagar joystick, giro, arrastre, solo físico) / Mundo (hora, lluvia, densidad); orbes amarillos en los bosques; carga sin congelar el visor |
 | `v0.6-escenas-vr` | Una sola página con 3 escenas (Casa, Bosque de papel, Bosque antiguo); menú 3D dentro del visor (clic del joystick) que cambia de escena sin cerrar el VR |
 

@@ -4,6 +4,8 @@ import { createCasa } from './world_casa.js';
 import { createBosque } from './world_bosque.js';
 import { mountMenu, ESCENAS, vrButtonHTML, arButtonHTML } from './menu.js';
 import { createBody, createPanel } from './bolsillo.js';
+import { createCompanion } from './colihuacho.js';
+import { createNarrator } from './narrador.js';
 
 // ============================================================================
 // Hall: una sola página, un solo visor, varias escenas. Cambiar de escena NO cierra la sesión VR.
@@ -31,13 +33,38 @@ const controllers = [0, 1].map((i) => {
 });
 
 // Cómo te mueves (se cambia desde el panel de bolsillo o desde las casillas del escritorio; se recuerda)
-const LOCO_DEF = { joystick: true, snap: true, grab: true, speed: 2.2, gain: 1.6, snapDeg: 30 };
+const LOCO_DEF = { joystick: true, snap: true, smooth: true, grab: true, speed: 2.2, gain: 1.6, snapDeg: 30, turnSpeed: 75 };
 let savedLoco = {}; try { savedLoco = JSON.parse(localStorage.getItem('hall.loco') || '{}'); } catch { /* sin guardado */ }
 const loco = { ...LOCO_DEF, ...savedLoco };
 const saveLoco = () => { try { localStorage.setItem('hall.loco', JSON.stringify(loco)); } catch { /* ignorar */ } syncLocoDom(); };
+// Sonido: cada categoría se puede bajar o apagar (por defecto todo muy sutil; sin zumbido de picaflor ni grillos)
+const AUD_DEF = { master: 1, ambiente: 0.35, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.8, narracion: 1 };
+let savedAud = {}; try { savedAud = JSON.parse(localStorage.getItem('hall.aud') || '{}'); } catch { /* sin guardado */ }
+const aud = { ...AUD_DEF, ...savedAud };
+const saveAud = () => { try { localStorage.setItem('hall.aud', JSON.stringify(aud)); } catch { /* ignorar */ } };
+const AUD_PRESETS = {
+  sutil: { ambiente: 0.35, pajaros: 0.55, grillos: 0, picaflor: 0, efectos: 0.7, narracion: 1 },
+  completo: { ambiente: 0.8, pajaros: 0.85, grillos: 0.5, picaflor: 0.4, efectos: 1, narracion: 1 },
+  narracion: { ambiente: 0.12, pajaros: 0.15, grillos: 0, picaflor: 0, efectos: 0.4, narracion: 1 },
+  silencio: { ambiente: 0, pajaros: 0, grillos: 0, picaflor: 0, efectos: 0, narracion: 0 },
+};
+let active = null, xrKind = null;
+const guide = { target: -1 };
 const app = {
-  renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco,
-  menuOpen: () => panel.blocking,
+  renderer, $, say, controllers, extra: $('extra'), features: [], suppressUntil: 0, loco, saveLoco, aud, saveAud, guide,
+  setAudPreset: (n) => { Object.assign(aud, AUD_PRESETS[n]); saveAud(); },
+  activeStops: () => (active && active.stops) || null,
+  stopIndex: () => (active && active.mv ? active.mv.cur : -1),
+  playStop: (i) => { if (active && active.mv) active.mv.play(i); },
+  gotoStop: (i) => {     // el colihuacho te guía hasta la parada; al llegar, la explica solo
+    if (!active || !active.village) return; const st = active.stops[i]; if (!st) return;
+    guide.target = i; companion.lead(new THREE.Vector3(st.pos[0], st.pos[1] + 0.15, st.pos[2])); say(`Sigue al colihuacho: ${st.titulo}`);
+  },
+  onStopPlay: () => { guide.target = -1; const p = panels.find((x) => x.visible) || panel; p.setPage('clase'); if (!p.visible) p.showFront(active.scene, renderer.xr.isPresenting ? renderer.xr.getCamera() : active.camera); else p.redraw(); },
+  onCompanionGrab: () => { const p = panels.find((x) => x.visible) || panel; p.showFront(active.scene, renderer.xr.isPresenting ? renderer.xr.getCamera() : active.camera); p.setPage(active.stops ? 'clase' : 'escenas'); },
+  onCompanionRelease: () => { panels.forEach((p) => { if (p.mode === 'docked') p.release(); }); },
+  onNarrationEnd: () => { panel.redraw(); },
+  menuOpen: () => panels.some((p) => p.blocking),
   selectScene: (id) => select(id),
   activeControls: () => (active && active.controls) || null,
   setInfo: ({ titulo, intro, hint }) => { $('titulo').textContent = titulo || ''; $('intro').textContent = intro || ''; $('hint').textContent = hint || ''; },
@@ -46,12 +73,17 @@ const app = {
 const BOSQUE_HINT = 'PC: arrastra para mirar, WASD para caminar, mantén clic en un objeto para agarrarlo y suéltalo moviendo el mouse para lanzarlo. L = lluvia, H = hora, R = reponer objetos. Quest: joystick izq camina, der gira, gatillo/grip en el aire arrastra el mundo, A = lluvia, B = hora.';
 const FACTORY = {
   casa: () => createCasa(app),
+  monteverde: () => createBosque(app, { id: 'monteverde', tipo: 'mv', titulo: 'Monte Verde · clase recorrida', intro: 'Recorre la villa del grupo que vivió aquí hace unos 14.800 años. Toca las esferas luminosas o agarra al colihuacho para abrir la clase: puedes pausar, adelantar, cambiar la velocidad y preguntar.', hint: 'Esferas luminosas = paradas. Colihuacho (la figura que te sigue) = clase y guía. PC: arrastra para mirar, WASD camina, M = panel, N = siguiente parada. Quest: joystick izq camina, der gira, gatillo = elegir.' }),
   bosque: () => createBosque(app, { id: 'bosque', titulo: 'Bosque de papel', intro: 'Un taller en medio del bosque valdiviano. Camina, agarra herramientas y tazas, mira las mariposas y espera al picaflor.', hint: BOSQUE_HINT }),
   antiguo: () => createBosque(app, { id: 'antiguo', tipo: 'antiguo', titulo: 'Bosque antiguo', intro: 'Troncos enormes con raíces y musgo bajo la niebla verde. Un tocón hace de mesa de taller.', hint: BOSQUE_HINT }),
 };
-const panel = createPanel(app);
+const panels = [createPanel(app)], panel = panels[0];
+const takePanel = () => { let p = panels.find((x) => !x.visible); if (!p && panels.length < 3) { p = createPanel(app); panels.push(p); p.setCurrent(active ? active.id : ''); } return p || panels[panels.length - 1]; };
 const body = createBody(controllers);
-const worlds = {}, loads = {}; let active = null, xrKind = null;
+const companion = createCompanion(app);
+const narr = createNarrator(app); app.narr = narr; narr.onChange = () => panel.redraw();
+const primeVoice = () => narr.prime(); addEventListener('pointerdown', primeVoice, { once: true }); addEventListener('keydown', primeVoice, { once: true });
+const worlds = {}, loads = {};
 const menu = mountMenu({ onSelect: (id) => select(id), onVR: async (id) => { await select(id); startXR('vr'); }, onAR: async (id) => { await select(id); startXR('ar'); } });
 $('btnVR').innerHTML = vrButtonHTML; $('btnAR').innerHTML = arButtonHTML;
 
@@ -67,9 +99,9 @@ function load(id) {
 async function select(id) {
   if (active && active.id === id) return;
   const w = await load(id);
-  if (active) { active.exit(); panel.hide(); active.scene.remove(body.group); }
-  active = w; w.enter(xrKind); w.scene.add(body.group);
-  menu.setCurrent(id); panel.setCurrent(id);
+  if (active) { active.exit(); panels.forEach((p) => p.hide()); active.scene.remove(body.group); narr.stopAll(); guide.target = -1; companion.unlead(); }
+  active = w; w.enter(xrKind); w.scene.add(body.group); companion.attach(w.scene); companion.setAudio(w.audio || null);
+  menu.setCurrent(id); panels.forEach((p) => p.setCurrent(id));
   const u = new URL(location.href); u.searchParams.set('escena', id); u.searchParams.delete('vr'); u.searchParams.delete('ar'); history.replaceState(null, '', u);
   if (xrKind) w.onXRStart && w.onXRStart(xrKind === 'ar' && !w.hasAR ? 'vr' : xrKind);
   say('Listo.');
@@ -82,9 +114,10 @@ async function startXR(kind) {
     ? { requiredFeatures: ['local-floor'], optionalFeatures: ['plane-detection', 'mesh-detection', 'anchors', 'hit-test', 'hand-tracking'] }
     : { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor', 'hand-tracking'] };
   try {
+    narr.prime(); active.startAudio && active.startAudio();
     const session = await navigator.xr.requestSession(kind === 'ar' ? 'immersive-ar' : 'immersive-vr', init);
     app.features = session.enabledFeatures ? [...session.enabledFeatures] : [];
-    session.addEventListener('end', () => { xrKind = null; setPresenting(false); active && active.onXRStop && active.onXRStop(); panel.hide(); say('Sesión terminada.'); });
+    session.addEventListener('end', () => { xrKind = null; setPresenting(false); active && active.onXRStop && active.onXRStop(); panels.forEach((p) => p.hide()); say('Sesión terminada.'); });
     await renderer.xr.setSession(session);
     xrKind = kind; setPresenting(true); active.onXRStart && active.onXRStart(kind === 'ar' && !active.hasAR ? 'vr' : kind);
   } catch (err) { console.error(err); say(`No se pudo iniciar ${kind.toUpperCase()}: ${err.message || err}`); }
@@ -100,19 +133,45 @@ let support = { ar: false, vr: false };
   say(ar || vr ? `Listo: ${ar ? 'AR (passthrough)' : ''}${ar && vr ? ' y ' : ''}${vr ? 'VR' : ''} disponible.` : 'Tu navegador tiene WebXR pero ninguna sesión disponible. Vista previa.');
 })();
 
-// ---- panel de bolsillo dentro del visor ----
+// ---- panel de bolsillo, colihuacho y manos ----
+const rcAim = new THREE.Raycaster(), mAim = new THREE.Matrix4();
+const aimFrom = (c) => { mAim.identity().extractRotation(c.matrixWorld); rcAim.ray.origin.setFromMatrixPosition(c.matrixWorld); rcAim.ray.direction.set(0, 0, -1).applyMatrix4(mAim); rcAim.far = 8; return rcAim; };
+const isHand = (c) => !!(c.userData.src && c.userData.src.hand);
+const handNear = (c) => c.getWorldPosition(new THREE.Vector3());
+// ¿hay un panel ya sacado justo donde está la mano? (para volver a agarrarlo) / ¿la mano está en un bolsillo? (para sacar otro)
+function grabPanelWith(c) {
+  const p = handNear(c), exist = panels.find((x) => x.visible && x.mode !== 'held' && x.contains(p));
+  if (exist) { exist.hold(c, active.scene); return true; }
+  if (body.nearPocket(p) >= 0) { takePanel().hold(c, active.scene); return true; }
+  return false;
+}
 controllers.forEach((c) => {
-  c.addEventListener('selectstart', () => {          // gatillo: pulsar un botón del panel
-    if (!panel.visible) return;
-    const i = panel.pick(c);
-    if (i >= 0) { app.suppressUntil = performance.now() + 150; panel.click(i); }
+  c.addEventListener('selectstart', () => {          // gatillo / pellizco
+    if (!active) return;
+    active.startAudio && active.startAudio(); narr.prime();
+    for (const p of panels) if (p.visible) { const i = p.pick(c); if (i >= 0) { app.suppressUntil = performance.now() + 150; p.click(i); return; } }
+    if (!companion.held && companion.pickRay(aimFrom(c)) >= 0) { app.suppressUntil = performance.now() + 250; companion.grab(c); return; }
+    if (isHand(c) && renderer.xr.isPresenting && grabPanelWith(c)) app.suppressUntil = performance.now() + 250;   // con las manos: pellizcar dentro del bolsillo o sobre un panel
   });
-  c.addEventListener('squeezestart', () => {         // grip con la mano en un bolsillo: sacar el panel
+  c.addEventListener('selectend', () => { if (companion.state.holder === c) companion.release(); if (isHand(c)) panels.forEach((p) => { if (p.holder === c) p.release(); }); });
+  c.addEventListener('squeezestart', () => {         // grip: sacar un panel del bolsillo o volver a agarrar uno que flota
     if (!active || !renderer.xr.isPresenting) return;
-    const p = c.getWorldPosition(new THREE.Vector3());
-    if (body.nearPocket(p) >= 0) { app.suppressUntil = performance.now() + 250; panel.hold(c, active.scene); }
+    if (grabPanelWith(c)) app.suppressUntil = performance.now() + 250;
   });
-  c.addEventListener('squeezeend', () => { if (panel.holder === c) panel.release(); });
+  c.addEventListener('squeezeend', () => panels.forEach((p) => { if (p.holder === c) p.release(); }));
+});
+// escritorio: clic en el panel, clic en el colihuacho, M = panel, N = siguiente parada
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (renderer.xr.isPresenting || !active) return;
+  const r = renderer.domElement.getBoundingClientRect(), ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  rcAim.setFromCamera(ndc, active.camera); rcAim.far = 30;
+  for (const p of panels) if (p.visible) { const i = p.pickWith(rcAim); if (i >= 0) { p.click(i); e.stopImmediatePropagation(); return; } }
+  if (companion.pickRay(rcAim) >= 0) { app.onCompanionGrab(); e.stopImmediatePropagation(); }
+}, true);
+addEventListener('keydown', (e) => {
+  if (!active || renderer.xr.isPresenting) return;
+  if (e.key === 'm' || e.key === 'M') { if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else { panel.showFront(active.scene, active.camera); if (active.stops) panel.setPage('clase'); } }
+  if ((e.key === 'n' || e.key === 'N') && active.stops) app.gotoStop(Math.min(active.stops.length - 1, app.stopIndex() + 1));
 });
 const latch = {};
 function pollXRInput() {
@@ -120,7 +179,7 @@ function pollXRInput() {
   for (const src of session.inputSources) {
     const gp = src.gamepad; if (!gp || !gp.buttons[3]) continue;     // clic del joystick = panel delante de ti / mandarlo a volar
     const on = !!gp.buttons[3].pressed, key = src.handedness;
-    if (on && !latch[key]) { app.suppressUntil = performance.now() + 150; if (panel.visible) panel.release(); else panel.showFront(active.scene, renderer.xr.getCamera()); }
+    if (on && !latch[key]) { app.suppressUntil = performance.now() + 150; if (panels.some((p) => p.visible)) panels.forEach((p) => p.release()); else panel.showFront(active.scene, renderer.xr.getCamera()); }
     latch[key] = on;
   }
 }
@@ -150,19 +209,25 @@ if (q.has('vr') || q.has('ar')) {
 // ---- bucle ----
 const clock = new THREE.Clock();
 let errCount = 0;
+const camPosV = new THREE.Vector3(), camDirV = new THREE.Vector3(), mHead = new THREE.Matrix4();
 renderer.setAnimationLoop((_, frame) => {
   const dt = Math.min(clock.getDelta(), 0.1);
   try {
     const xr = renderer.xr.isPresenting;
     body.group.visible = xr;
-    if (xr) {
-      pollXRInput();
-      const cam = renderer.xr.getCamera();
-      body.update(dt, cam.getWorldPosition(new THREE.Vector3()), cam.getWorldDirection(new THREE.Vector3()));
+    panels.forEach((p) => p.update(dt, controllers));
+    active.update(dt, frame);                 // aquí se mueve la plataforma del jugador (joystick, arrastre, giro)
+    // cabeza: pose EXACTA de este cuadro (antes se leía la del cuadro anterior y el cuerpo quedaba atrasado)
+    let have = false;
+    if (xr && frame) {
+      const ref = renderer.xr.getReferenceSpace(), vp = ref && frame.getViewerPose(ref);
+      if (vp) { mHead.fromArray(vp.transform.matrix); if (active.rig) { active.rig.updateMatrixWorld(true); mHead.premultiply(active.rig.matrixWorld); } camPosV.setFromMatrixPosition(mHead); camDirV.set(0, 0, -1).transformDirection(mHead); have = true; }
     }
-    panel.update(dt, controllers);
-    active.update(dt, frame);
+    if (!have) { const cam = xr ? renderer.xr.getCamera() : active.camera; cam.getWorldPosition(camPosV); cam.getWorldDirection(camDirV); }
+    if (xr) { pollXRInput(); body.update(dt, camPosV, camDirV); }
+    companion.update(dt, camPosV, camDirV, performance.now() / 1000);
+    if (guide.target >= 0 && active.stops) { const s = active.stops[guide.target]; if (Math.hypot(camPosV.x - s.pos[0], camPosV.z - s.pos[2]) < 4.5) { const i = guide.target; guide.target = -1; active.mv.play(i); } }
   } catch (e) { if (errCount++ < 5) { console.error(e); say('Error en la escena: ' + (e.message || e)); } }
   renderer.render(active.scene, active.camera);      // siempre se dibuja, aunque algo falle
 });
-window.__app = { app, worlds, select, startXR, renderer, panel, body, loco, get active() { return active; } };
+window.__app = { app, worlds, select, startXR, renderer, panel, panels, body, loco, companion, narr, aud, get active() { return active; } };

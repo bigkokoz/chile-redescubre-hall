@@ -24,7 +24,7 @@ const scanner = new RoomScanner(scene, planeMaterial);
 scanner.group.visible = false;
 const hud = makeHud();
 scene.add(hud.mesh);
-const audio = new HallAudio(camera);
+const audio = new HallAudio(camera); audio.prefs = app.aud;
 scene.add(audio.sfxRoot);
 const audioObjs = [casa.slotAnchor, ...casa.discs.map((d) => d.holder)];
 const toys = createToys({ casa, audio });
@@ -192,6 +192,7 @@ function placeStationAR(cam) {
   return true;
 }
 function update(dt, frame) {
+  if (audio.pad) audio.pad.setVolume(0.55 * (app.aud.ambiente ?? 1) * (app.aud.master ?? 1));
   themeShared.uTime.value += dt;
   const t = themeShared.uTime.value;
 
@@ -252,7 +253,7 @@ function applyActive(on, xrKind) {
 window.__hall = { THREE, toys, birds, scene, camera, renderer, casa, themeState, scanner, chooseTheme, look: (y, p) => { yaw = y; pitch = p; } };
 
 return {
-  id: 'casa', scene, camera, update, hasAR: true,
+  id: 'casa', scene, camera, update, hasAR: true, audio, startAudio: () => audio.start(casa.slotAnchor, audioObjs),
   enter: (xrKind) => applyActive(true, xrKind), exit: () => applyActive(false),
   onXRStart: (k) => { setMode(k); enabledFeatures = app.features || []; }, onXRStop: () => setMode('preview'),
 };

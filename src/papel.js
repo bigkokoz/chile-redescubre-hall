@@ -56,6 +56,8 @@ export function treeCanvas(kind, seed) {
     const tx = w / 2 + (r() - 0.5) * 24, ty = h * 0.5;
     br(tx, ty, (r() - 0.5) * 0.2, h * 0.17, tw * 0.55, 4); br(tx, ty + 30, -0.6 - r() * 0.3, h * 0.13, tw * 0.4, 3); br(tx, ty + 10, 0.6 + r() * 0.3, h * 0.13, tw * 0.4, 3);
   }
+  for (const L of leaves) L[1] = Math.max(L[1], L[3] + 10);   // que las copas no se corten en el borde de la lámina
+  for (const s of segs) { s[1] = Math.max(s[1], 12); s[3] = Math.max(s[3], 12); }
   for (const L of leaves) { ctx.fillStyle = EDGE; ctx.beginPath(); ctx.ellipse(L[0], L[1], L[2] + 3, L[3] + 3, r() * 3, 0, 6.3); ctx.fill(); }
   for (const s of segs) stroke2(ctx, () => { ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); }, bark, s[4]);
   for (const L of leaves) { ctx.fillStyle = L[4]; ctx.beginPath(); ctx.ellipse(L[0], L[1], L[2], L[3], r() * 3, 0, 6.3); ctx.fill(); }
@@ -155,8 +157,8 @@ export function leafCanvas() {
 
 export function groundCanvas(seed = 3, lime = false) {
   const w = 1024, h = 1024, c = mk(w, h), ctx = c.getContext('2d'), r = rng(seed);
-  ctx.fillStyle = lime ? '#86b043' : '#6f8f4e'; ctx.fillRect(0, 0, w, h);
-  const blobs = lime ? [['#6fa032', 26], ['#9bc653', 22], ['#7a8a3a', 10], ['#5a8a2c', 24], ['#b3d46a', 14]] : [['#5c8442', 26], ['#7fa05a', 18], ['#8a7a4a', 10], ['#4e7a3c', 24], ['#9a8a58', 8]];
+  ctx.fillStyle = lime === 'turba' ? '#6a6a3c' : lime ? '#86b043' : '#6f8f4e'; ctx.fillRect(0, 0, w, h);
+  const blobs = lime === 'turba' ? [['#4f5a30', 26], ['#7a7040', 20], ['#3a3226', 14], ['#8a8a50', 12], ['#5c6a38', 24], ['#9a8a58', 8]] : lime ? [['#6fa032', 26], ['#9bc653', 22], ['#7a8a3a', 10], ['#5a8a2c', 24], ['#b3d46a', 14]] : [['#5c8442', 26], ['#7fa05a', 18], ['#8a7a4a', 10], ['#4e7a3c', 24], ['#9a8a58', 8]];
   for (let i = 0; i < 520; i++) { const b = blobs[(r() * blobs.length) | 0]; ctx.fillStyle = b[0]; ctx.globalAlpha = 0.35 + r() * 0.4; ctx.beginPath(); ctx.ellipse(r() * w, r() * h, 20 + r() * 70, 14 + r() * 40, r() * 3, 0, 6.3); ctx.fill(); }
   ctx.globalAlpha = 1;
   for (let i = 0; i < 9000; i++) { ctx.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.07)'; ctx.fillRect(r() * w, r() * h, 1 + r() * 3, 1 + r() * 2); }

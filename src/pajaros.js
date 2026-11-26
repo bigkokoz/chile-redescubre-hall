@@ -12,7 +12,7 @@ function wingGeo() {
   return g;
 }
 
-export function createBirds(scene, audio) {
+export function createBirds(scene, audio, opts = {}) {
   const root = new THREE.Group(); root.name = 'Pajaros'; scene.add(root);
   const mat = new THREE.MeshBasicMaterial({ color: COLORS[0], side: THREE.DoubleSide, toneMapped: false });
   const bodyGeo = new THREE.ConeGeometry(0.04, 0.3, 6); bodyGeo.rotateX(Math.PI / 2);
@@ -61,7 +61,7 @@ export function createBirds(scene, audio) {
       cc.setHex(COLORS[themeIndex] ?? COLORS[0]); mat.color.lerp(cc, Math.min(1, dt * 2.5));
       if (!vis) return;
       tRoom -= dt; tFar -= dt;
-      if (tRoom <= 0) { roomFlock(); tRoom = rnd(26, 42); }
+      if (tRoom <= 0) { if (opts.room !== false) roomFlock(); tRoom = rnd(26, 42); }
       if (tFar <= 0) { farFlock(); tFar = rnd(12, 20); }
       for (let i = flocks.length - 1; i >= 0; i--) {
         const f = flocks[i]; f.t += dt;

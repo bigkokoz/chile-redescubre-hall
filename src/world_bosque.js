@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import * as P from './papel.js';
 import { createToys, makeCup, makeOrb } from './juguetes.js';
+import { createBirds } from './pajaros.js';
+import { buildVillage } from './monteverde.js';
+import { scatterProps } from './props.js';
+import { MV_STOPS } from './mv_data.js';
 import { HallAudio } from './audio.js';
 import { makeHud } from './hud.js';
 
@@ -29,8 +33,14 @@ const LOCO = {
   zonaMuerta: 0.15,
   radioMax: 48,
 };
-const ANT = cfg.tipo === 'antiguo';
-const HORAS = ANT ? [
+const ANT = cfg.tipo === 'antiguo', MV = cfg.tipo === 'mv', SIN = MV || !!cfg.sinTaller;
+const HORAS_MV = [
+  { n: 'amanecer frío', bg: 0xc8dce0, fog: 0xc6dadc, near: 3, far: 50, tint: [0.97, 1.0, 1.06], hemi: 0.95, glow: 0xdff0ff, glowOp: 0.35, fire: 0, mariposas: 0 },
+  { n: 'día', bg: 0xcfe6d0, fog: 0xcfe3c8, near: 3, far: 72, tint: [1, 1.02, 1], hemi: 1.0, glow: 0xffffff, glowOp: 0.22, fire: 0, mariposas: 1 },
+  { n: 'atardecer', bg: 0xf0c48a, fog: 0xe9b97c, near: 4, far: 76, tint: [1.12, 0.92, 0.72], hemi: 0.9, glow: 0xffb060, glowOp: 0.75, fire: 0.2, mariposas: 1 },
+  { n: 'noche', bg: 0x06130e, fog: 0x0a1c20, near: 2, far: 42, tint: [0.36, 0.5, 0.6], hemi: 0.45, glow: 0x66ffd0, glowOp: 0.12, fire: 1, mariposas: 0 },
+];
+const HORAS = MV ? HORAS_MV : ANT ? [
   { n: 'mañana', bg: 0xdcf0bc, fog: 0xd6edb2, near: 2, far: 32, tint: [1.02, 1.07, 0.92], hemi: 1.0, glow: 0xf6ffd0, glowOp: 0.3, fire: 0, mariposas: 1 },
   { n: 'hora dorada', bg: 0xf2e0a0, fog: 0xe6d596, near: 3, far: 64, tint: [1.12, 1.02, 0.76], hemi: 0.9, glow: 0xffd070, glowOp: 0.7, fire: 0.25, mariposas: 1 },
   { n: 'noche', bg: 0x061208, fog: 0x0a1c0c, near: 2, far: 36, tint: [0.4, 0.62, 0.5], hemi: 0.45, glow: 0x9fffa0, glowOp: 0.12, fire: 1, mariposas: 0 },
@@ -47,7 +57,7 @@ scene.fog = new THREE.Fog(HORAS[0].fog, HORAS[0].near, HORAS[0].far);
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 300);
 camera.position.set(0, 1.62, 0);
 const rig = new THREE.Group(); rig.name = 'Jugador'; rig.add(camera); scene.add(rig);
-rig.position.set(-0.3, ANT ? 0 : 0.3, ANT ? 1.1 : 0.8);
+rig.position.set(MV ? 0 : -0.3, ANT || SIN ? 0 : 0.3, MV ? 7.5 : ANT ? 1.1 : 0.8);
 const world = new THREE.Group(); world.name = 'Mundo'; scene.add(world);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x6a7a4a, 1.0); scene.add(hemi);
@@ -70,6 +80,7 @@ function billboard(mat) {
   };
   return mat;
 }
+const avoid = MV ? (x, z) => Math.abs(x) < 18 && z > -20 && z < 10 : (x, z) => Math.abs(x) < 3.3 && z > -4.2 && z < 3.3;
 const cardGeo = new THREE.PlaneGeometry(1, 1); cardGeo.translate(0, 0.5, 0);
 const layers = [];
 function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0) {
@@ -81,7 +92,7 @@ function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0) 
     for (let k = 0; k < 8; k++) {
       const a = r() * 6.283, rad = rMin + Math.sqrt(r()) * (rMax - rMin);
       x = Math.cos(a) * rad; z = Math.sin(a) * rad;
-      if (!(Math.abs(x) < 3.3 && z > -4.2 && z < 3.3)) break;      // no encima de la plataforma
+      if (!avoid(x, z)) break;      // no encima de la plataforma
     }
     const h = hMin + r() * (hMax - hMin);
     m.compose(pos.set(x, y, z), q, s.set(h * aspect, h, 1)); mesh.setMatrixAt(i, m);
@@ -91,7 +102,14 @@ function cards(canvas, count, rMin, rMax, hMin, hMax, aspect, mul, seed, y = 0) 
 }
 
 // ---- árboles y plantas por anillos de profundidad ----
-if (ANT) {
+if (MV) {
+  // bosque de Monte Verde: coihues y alerces más dispersos, helechos y quila; deja libre la villa
+  const tc = [['broad', 11], ['broad', 12], ['alerce', 14], ['alerce', 15], ['dead', 16]].map(([k, sd]) => P.treeCanvas(k, sd));
+  const ring = (n, rMin, rMax, hMin, hMax, mul, seed) => tc.forEach((c, i) => cards(c, Math.ceil(n / 5), rMin, rMax, hMin, hMax, 0.5, mul, seed + i));
+  ring(40, 14, 28, 5, 8, 1.0, 100); ring(80, 28, 44, 7, 11, 0.97, 200); ring(110, 44, 64, 9, 14, 0.94, 300);
+  [1, 2, 3].forEach((i) => cards(P.fernCanvas(20 + i), 22, 9, 30, 0.8, 1.5, 1.0, 1.0, 500 + i));
+  cards(P.nalcaCanvas(31), 8, 9, 30, 1.1, 1.9, 1.0, 1.0, 601); [1, 2].forEach((i) => cards(P.quilaCanvas(40 + i), 8, 9, 30, 2.0, 3.4, 0.25, 0.95, 700 + i));
+} else if (ANT) {
   // árboles antiguos: troncos enormes con raíces abiertas y musgo lima, muy cerca (visto desde abajo)
   const anc = [1, 2, 3, 4].map((k) => P.ancientCanvas(60 + k * 7));
   const ring = (n, rMin, rMax, hMin, hMax, mul, seed) => anc.forEach((c, k) => cards(c, Math.ceil(n / 4), rMin, rMax, hMin, hMax, 0.8, mul, seed + k));
@@ -116,7 +134,7 @@ treeRing(180, 36, 56, 11, 17, 0.9, 400);
 await tick();
 // ---- suelo, hojarasca y ramitas ----
 {
-  const gt = P.toTex(P.groundCanvas(3, ANT), true); gt.repeat.set(26, 26);
+  const gt = P.toTex(P.groundCanvas(3, MV ? 'turba' : ANT), true); gt.repeat.set(26, 26);
   const g = new THREE.Mesh(new THREE.CircleGeometry(90, 56).rotateX(-Math.PI / 2), reg(new THREE.MeshBasicMaterial({ map: gt, fog: true }), 0.95));
   g.name = 'Suelo'; scene.add(g);
   const r = P.rng(77), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), pos = new THREE.Vector3();
@@ -137,6 +155,17 @@ await tick();
   tw.frustumCulled = false; scene.add(tw);
 }
 
+// rocas y troncos con musgo (recursos 3D generados por código)
+{
+  const base = { scene, reg, avoid, mossy: ANT ? 0.8 : MV ? 0.3 : 0.65, seed: ANT ? 47 : MV ? 81 : 33, rocks: ANT ? 54 : 40, logs: ANT ? 22 : 14, rMin: 3, rMax: 42, bigRocks: ANT ? 12 : 6 };
+  if (MV) {
+    const CZ = (x) => -17 + 2.2 * Math.sin(x * 0.11);
+    scatterProps({ ...base, rMin: 20, rocks: 18, logs: 8 });                                                                   // bosque
+    scatterProps({ ...base, avoid: null, rocks: 30, logs: 0, mossy: 0.15, bigRocks: 5, seed: 91, place: (rnd) => { const x = -42 + rnd() * 84; return [x, CZ(x) + (rnd() - 0.5) * 6]; } });   // piedras del arroyo
+    const fl = []; [[-3.2, -4.4], [3.2, -4.4]].forEach(([fx, fz], k) => { for (let i = 0; i < 3; i++) { const a = i * 2.1 + k * 0.8 + 0.4; fl.push({ x: fx + Math.cos(a) * 1.7, z: fz + Math.sin(a) * 1.7, rot: a + Math.PI / 2, len: 1.9, rad: 0.17 }); } });
+    scatterProps({ ...base, rocks: 0, logs: 0, fixedLogs: fl, avoid: null, mossy: 0.2, seed: 55 });                            // troncos-asiento junto al fuego
+  } else scatterProps(base);
+}
 await tick();
 if (ANT) {
   // montículos de musgo lima y hongos
@@ -163,9 +192,9 @@ function woodCanvas(seed, w = 512, h = 512, plank = 64) {
 const woodTex = P.toTex(woodCanvas(5), true);
 const wood = (rx = 2, ry = 2) => { const t = woodTex.clone(); t.needsUpdate = true; t.repeat.set(rx, ry); return reg(new THREE.MeshLambertMaterial({ map: t, fog: true }), 1); };
 function box(w, h, d, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); world.add(m); return m; }
-const DECK_H = ANT ? 0 : 0.3;
-const TABLE = ANT ? { x: 1.0, z: -0.8, w: 1.2, d: 1.2, top: 0.86 } : { x: 0.95, z: -0.35, w: 1.6, d: 0.78, top: DECK_H + 0.82 };
-if (!ANT) {
+const DECK_H = ANT || SIN ? 0 : 0.3;
+const TABLE = SIN ? { x: 0, z: 0, w: 1, d: 1, top: 0 } : ANT ? { x: 1.0, z: -0.8, w: 1.2, d: 1.2, top: 0.86 } : { x: 0.95, z: -0.35, w: 1.6, d: 0.78, top: DECK_H + 0.82 };
+if (!ANT && !SIN) {
 box(4.4, DECK_H, 4.4, wood(3, 3), 0, DECK_H / 2, 0).name = 'Plataforma';
 box(1.3, 0.2, 0.5, wood(1, 1), 0, 0.1, -2.45).name = 'Peldaño_1';
 box(1.3, 0.1, 0.5, wood(1, 1), 0, 0.05, -2.95).name = 'Peldaño_2';
@@ -195,7 +224,7 @@ box(TABLE.w - 0.2, 0.05, 0.4, wood(2, 1), TABLE.x, DECK_H + 0.3, TABLE.z - 0.1).
   board.position.set(TABLE.x, DECK_H + 1.9, TABLE.z - 1.13); world.add(board); board.name = 'Tablero_siluetas';
   [-0.75, 0.75].forEach((dx) => box(0.07, 1.1, 0.05, wood(1, 1), TABLE.x + dx, DECK_H + 1.9, TABLE.z - 1.12));
 }
-} else {
+} else if (ANT) {
   // tocón gigante como mesa de taller + hongos
   const rc = document.createElement('canvas'); rc.width = rc.height = 256; const rx = rc.getContext('2d'); rx.fillStyle = '#c8a46a'; rx.fillRect(0, 0, 256, 256);
   for (let k = 14; k > 0; k--) { rx.strokeStyle = `rgba(90,60,30,${0.25 + (k % 3) * 0.1})`; rx.lineWidth = 3; rx.beginPath(); rx.arc(128 + (k % 2), 128, k * 8.5, 0, 6.3); rx.stroke(); }
@@ -211,6 +240,7 @@ const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.1), new THREE.
 const glowTex = P.toTex(P.glowCanvas());
 const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffc070, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.0, fog: false }));
 lampGlow.scale.setScalar(1.4); lampGlow.position.copy(lantern.position); world.add(lampGlow);
+if (SIN) { lantern.visible = false; lampGlow.visible = false; }
 const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.25, fog: false }));
 sunGlow.scale.setScalar(70); sunGlow.position.set(0, 16, -70); scene.add(sunGlow);
 
@@ -223,8 +253,9 @@ const solidsCasa = [
   { min: new THREE.Vector3(TABLE.x - TABLE.w / 2, TABLE.top - 0.09, TABLE.z - TABLE.d / 2), max: new THREE.Vector3(TABLE.x + TABLE.w / 2, TABLE.top, TABLE.z + TABLE.d / 2) },
   { min: new THREE.Vector3(TABLE.x - 0.55, 0, TABLE.z - 2.9), max: new THREE.Vector3(TABLE.x + 0.55, 9, TABLE.z - 1.15) },
 ];
-const solids = ANT ? [{ min: new THREE.Vector3(TABLE.x - 0.66, 0, TABLE.z - 0.66), max: new THREE.Vector3(TABLE.x + 0.66, TABLE.top, TABLE.z + 0.66) }] : solidsCasa;
-const audio = new HallAudio(camera);
+const solids = SIN ? [] : ANT ? [{ min: new THREE.Vector3(TABLE.x - 0.66, 0, TABLE.z - 0.66), max: new THREE.Vector3(TABLE.x + 0.66, TABLE.top, TABLE.z + 0.66) }] : solidsCasa;
+const audio = new HallAudio(camera); audio.prefs = app.aud;
+const birds = createBirds(scene, audio, { room: false });
 scene.add(audio.sfxRoot);
 const toys = createToys({ audio, parent: world, solids, onFloor: (x, z) => x * x + z * z < 95 * 95, defaults: false });
 const kraft = new THREE.MeshStandardMaterial({ color: 0xb98b5a, roughness: 0.8 });
@@ -239,6 +270,7 @@ function makeMallet() { const g = new THREE.Group(); part(g, new THREE.CylinderG
 function makeTwig(len) { const g = new THREE.Group(); part(g, new THREE.CylinderGeometry(0.008, 0.012, len, 6), new THREE.MeshStandardMaterial({ color: 0x6e5436, roughness: 1 }), 0, 0, 0, Math.PI / 2); return g; }
 const tp = TABLE.top;
 const put = (kind, obj, dx, dz, o) => { const b = toys.add(kind, obj, new THREE.Vector3(TABLE.x + dx * (ANT ? 0.62 : 1), tp + (o.r || 0.05) + 0.002, TABLE.z + dz * (ANT ? 0.62 : 1)), o); obj.rotation.y = o.yaw || 0; b.obj.rotation.y = o.yaw || 0; return b; };
+if (!SIN) {
 put('martillo', makeHammer(), -0.35, 0.05, { r: 0.06, e: 0.2, yaw: 0.4 });
 put('alicate', makePliers(), -0.05, 0.12, { r: 0.05, e: 0.2, yaw: -0.5 });
 put('destornillador', makeScrewdriver(), 0.2, -0.05, { r: 0.04, e: 0.2, yaw: 0.9 });
@@ -246,24 +278,29 @@ put('mazo', makeMallet(), 0.5, 0.1, { r: 0.06, e: 0.2, yaw: -0.2 });
 put('taza', makeCup(0xc4623a), -0.6, -0.12, { r: 0.046, e: 0.25, upright: 'yaw', color: 0xc4623a, roll: 7 });
 put('taza', makeCup(0xf2ead8), -0.5, 0.2, { r: 0.046, e: 0.25, upright: 'yaw', color: 0xf2ead8, roll: 7 });
 for (let i = 0; i < 4; i++) put('palito', makeTwig(0.18 + i * 0.05), 0.1 + i * 0.1, -0.28, { r: 0.02, e: 0.3, yaw: i });
+}
 // recoloca las herramientas sobre la mesa (la mesa está a TABLE.top; los objetos arrancan dormidos)
 
 // ---- orbes de luz (la partícula amarilla del hall): flotan, se agarran, se lanzan y rebotan ----
-[[-0.7, 1.55, 0.6], [0.3, 1.85, 0.95], [1.9, 1.6, 0.2], [-1.7, 1.35, -0.4], [0.8, 1.95, -1.5]].forEach(([dx, dy, dz]) => {
+if (!SIN) [[-0.7, 1.55, 0.6], [0.3, 1.85, 0.95], [1.9, 1.6, 0.2], [-1.7, 1.35, -0.4], [0.8, 1.95, -1.5]].forEach(([dx, dy, dz]) => {
   const o = makeOrb(); o.userData.parts.forEach((m) => m.color.set(0xffd23c));
   toys.add('orbe', o, new THREE.Vector3(TABLE.x + dx, dy, TABLE.z + dz), { r: 0.07, e: 0.9, g: 0, drag: 0.7, roll: 0.5 });
 });
 await tick();
+let village = null;
+if (MV) village = buildVillage({ scene, world, reg, toys, audio, aud: app.aud, camera });
+const mv = MV ? { stops: MV_STOPS, cur: -1, play(i) { mv.cur = i; village.markVisited(i); app.narr.play(MV_STOPS[i]); app.onStopPlay && app.onStopPlay(i); } } : null;
 // ---- copihues colgantes + enredaderas ----
 const flowerSpots = [];
 {
   const r = P.rng(55), vineMat = reg(billboard(new THREE.MeshBasicMaterial({ map: P.toTex(P.vineCanvas(8)), alphaTest: 0.45, side: THREE.DoubleSide, fog: true })), 1);
-  const n = ANT ? 5 : 8, vines = new THREE.InstancedMesh(cardGeo, vineMat, n), m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3();
+  const n = MV ? 0 : ANT ? 5 : 8, vines = new THREE.InstancedMesh(cardGeo, vineMat, n), m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
     const a = r() * 6.283, rad = 2.3 + r() * 3.2, x = Math.cos(a) * rad, z = Math.sin(a) * rad, h = 1.8 + r() * 1.2;
     m.compose(pos.set(x, 3.3 - h, z), q, s.set(h * 0.25, h, 1)); vines.setMatrixAt(i, m);
     flowerSpots.push(new THREE.Vector3(x, 3.3 - h * 0.45, z));
   }
+  if (!flowerSpots.length) flowerSpots.push(new THREE.Vector3(8, 2, -2));
   vines.frustumCulled = false; scene.add(vines);
 }
 
@@ -383,8 +420,12 @@ function updateLook(dt) {
   fireMat.opacity = look.fire * 0.9; fires.visible = look.fire > 0.02;
   lampGlow.material.opacity = Math.min(0.9, 0.08 + look.fire * 0.7);
   rainMat.uniforms.uOn.value = look.rain; rain.visible = look.rain > 0.02;
-  if (rainAmb) rainAmb.setVolume(0.55 * look.rain);
-  if (grillos) grillos.setVolume(0.045 * look.fire);
+  const AV = (k) => (app.aud[k] ?? 1) * (app.aud.master ?? 1);
+  if (rainAmb) rainAmb.setVolume(0.55 * look.rain * AV('ambiente'));
+  if (windAmb) windAmb.setVolume(0.1 * AV('ambiente'));
+  if (grillos) grillos.setVolume(0.045 * look.fire * AV('grillos'));
+  if (pica.st.buzz) pica.st.buzz.setVolume(0.35 * AV('picaflor'));
+  birds.setVisible(look.rain < 0.3);
 }
 function setHora(i) { PARAM.hora = i % HORAS.length; $(ID('hora')).textContent = `Hora: ${HORAS[PARAM.hora].n}`; }
 function toggleRain() { PARAM.lluvia = !PARAM.lluvia; $(ID('rain')).textContent = PARAM.lluvia ? 'Parar lluvia' : 'Llover'; startAudio(); }
@@ -397,7 +438,7 @@ let audioOn = false;
 async function startAudio() {
   if (audioOn) return; audioOn = true;
   await audio.start(new THREE.Object3D(), [], { pad: false });
-  windAmb = audio.ambient('hojas', 0.1); grillos = audio.ambient('grillos', 0); rainAmb = audio.ambient('lluvia', 0); pica.st.buzz = audio.buzzer(pica.g, 0.5);
+  windAmb = audio.ambient('viento2', 0.1); grillos = audio.ambient('grillos', 0); rainAmb = audio.ambient('lluvia', 0); pica.st.buzz = audio.buzzer(pica.g, 0.5); if (village) village.onAudioStart();
 }
 
 // ---- interacción: agarrar / lanzar y mover el mundo ----
@@ -414,6 +455,7 @@ controllers.forEach((c) => {
   const start = () => {
     if (busy()) return;
     startAudio();
+    if (village) { const si = village.pickStop(rayFrom(c)); if (si >= 0) { mv.play(si); return; } }
     const it = pickToy(rayFrom(c));
     if (it) { toys.grab(it.b, c); held.set(c, it.b); line.visible = false; }
     else if (!drag && app.loco.grab) drag = { c, prev: c.position.clone() };
@@ -440,7 +482,8 @@ function locomotionXR(dt, cam) {
       rig.position.addScaledVector(fwd, -y * app.loco.speed * dt).addScaledVector(rgt, x * app.loco.speed * dt);
     }
     if (hand === 'right' && app.loco.snap) {
-      if (Math.abs(x) > 0.7 && !snapLatch) { snapLatch = true; const a = -Math.sign(x) * THREE.MathUtils.degToRad(app.loco.snapDeg); rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; }
+      if (app.loco.smooth) { if (x) { const a = -x * THREE.MathUtils.degToRad(app.loco.turnSpeed) * dt; rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; } }
+      else if (Math.abs(x) > 0.7 && !snapLatch) { snapLatch = true; const a = -Math.sign(x) * THREE.MathUtils.degToRad(app.loco.snapDeg); rig.position.sub(headW).applyAxisAngle(up, a).add(headW); rig.rotation.y += a; }
       else if (Math.abs(x) < 0.3) snapLatch = false;
     }
     const b = gp.buttons;
@@ -454,7 +497,7 @@ function locomotionXR(dt, cam) {
   }
 }
 function groundHeight(x, z) {
-  if (ANT) return 0;
+  if (ANT || SIN) return 0;
   const onDeck = Math.abs(x) < 2.2 && Math.abs(z) < 2.2;
   const step1 = Math.abs(x) < 0.65 && z < -2.2 && z > -2.7, step2 = Math.abs(x) < 0.65 && z <= -2.7 && z > -3.2;
   return onDeck ? DECK_H : step1 ? 0.2 : step2 ? 0.1 : 0;
@@ -468,6 +511,7 @@ function ndc(e) { const r = renderer.domElement.getBoundingClientRect(); mouseNd
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!active) return;
   startAudio(); if (renderer.xr.isPresenting) return; ndc(e);
+  if (village) { const si = village.pickStop(raycaster); if (si >= 0) { mv.play(si); return; } }
   const it = pickToy(raycaster);
   if (it) { mouseItem = it.b; mouseDist = it.dist; mouseHand.position.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, mouseDist); mouseHand.quaternion.copy(camera.getWorldQuaternion(new THREE.Quaternion())); mouseHand.updateMatrixWorld(true); toys.grab(it.b, mouseHand); return; }
   dragLook = true; lx = e.clientX; ly = e.clientY;
@@ -521,8 +565,10 @@ function update(dt) {
   const camW = cam.getWorldPosition(tmpV).clone();
   rainMat.uniforms.uT.value = t; rainMat.uniforms.uCam.value.copy(camW);
   picaUpdate(dt, t);
+  birds.update(dt, PARAM.hora === HORAS.length - 1 ? 1 : 0, camW);
+  if (village) village.update(dt, t, camW);
   chirpT -= dt;
-  if (chirpT <= 0 && audioOn && look.fire < 0.5 && look.rain < 0.3) { chirpT = 4 + Math.random() * 9; const a = Math.random() * 6.283, d = 6 + Math.random() * 9; try { audio.sfx('chirp', new THREE.Vector3(camW.x + Math.cos(a) * d, 3 + Math.random() * 4, camW.z + Math.sin(a) * d), 0.3); } catch { /* sin audio */ } }
+  if (chirpT <= 0 && audioOn && look.fire < 0.5 && look.rain < 0.3) { chirpT = 5 + Math.random() * 10; const a = Math.random() * 6.283, d = 6 + Math.random() * 9; try { audio.sfx(['chirp', 'trino', 'chucao'][(Math.random() * 3) | 0], new THREE.Vector3(camW.x + Math.cos(a) * d, 3 + Math.random() * 4, camW.z + Math.sin(a) * d), 0.3); } catch { /* sin audio */ } }
   for (const b of butter) {
     const f = (tt) => tmpV2.set(b.c.x + Math.sin(tt * b.a[0] + b.p[0]) * b.R1, b.c.y + Math.sin(tt * b.a[1] + b.p[1]) * 0.45, b.c.z + Math.cos(tt * b.a[2] + b.p[2]) * b.R1);
     const p0 = f(t).clone(), p1 = f(t + 0.08);
@@ -545,7 +591,7 @@ const setNiebla = (v) => { PARAM.niebla = v; const el = $(ID('niebla')); if (el)
 const setDens = (v) => { setDensidad(v); const el = $(ID('dens')); if (el) el.value = v; };
 await tick();
 return {
-  id: cfg.id, scene, camera, update, hasAR: false,
+  id: cfg.id, scene, camera, rig, update, hasAR: false, audio, startAudio, stops: MV ? MV_STOPS : null, mv, village, hasToys: true,
   controls: { horas: HORAS.map((h) => h.n), hora: () => PARAM.hora, setHora, lluvia: () => PARAM.lluvia, toggleRain, densidad: () => PARAM.densidad, setDensidad: setDens, niebla: () => PARAM.niebla, setNiebla },
   enter: () => applyActive(true), exit: () => applyActive(false),
   onXRStart: () => { camera.position.set(0, 0, 0); hudUntil = performance.now() + 25000; }, onXRStop: () => { camera.position.set(0, 1.62, 0); },
